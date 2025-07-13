@@ -1,0 +1,253 @@
+blueprint:
+  name: Litter Robot / Universal Sensor To-Do MS365
+  description: >
+    Create MS365 (or other Home Assistant todo) tasks based on any Litter-Robot/box sensor (full, error, replace, etc).
+    - Custom task names & emoji per sensor
+    - Deduplication: never more than 1 task per sensor at a time
+    - Auto-complete when fixed
+    - Panic Cat mode at 90%+ (full emoji drama)
+    - Works with any to-do entity, any number of sensors
+    - Error/unavailable sensors also trigger tasks
+  domain: automation
+  input:
+    todo_entity:
+      name: To-Do List Entity
+      description: 'The Home Assistant todo entity (eg. todo.m365_tasks)'
+      selector:
+        entity:
+          domain: todo
+    monitored_sensors:
+      name: Monitored Sensors
+      description: >
+        A mapping of sensor entity_id -> [Task summary, Emoji]. 
+        Example:
+          sensor.litter_robot_waste_drawer: ["💩 Empty waste drawer!", "💩"]
+          sensor.litter_robot_hopper_status: ["🪣 Empty hopper!", "🪣"]
+      default: {}
+      selector:
+        object:
+    alert_threshold:
+      name: Alert Threshold (%)
+      description: 'Value above which a task should be created'
+      default: 75
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          unit_of_measurement: '%'
+    panic_threshold:
+      name: Panic Threshold (%)
+      description: 'Value above which panic mode & cat appears'
+      default: 90
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          unit_of_measurement: '%'
+    cleanup_threshold:
+      name: Cleanup Threshold (%)
+      description: 'Value below which the task is auto-completed'
+      default: 50
+      selector:
+        number:
+          min: 1
+          max: 100
+          step: 1
+          unit_of_measurement: '%'
+    error_states:
+      name: Error/Problem States
+      description: 'Sensor values which count as error/problem (eg. unavailable, unknown, error, replace)'
+      default:
+        - unavailable
+        - unknown
+        - error
+        - replace
+      selector:
+        object:
+
+mode: parallel
+variables:
+  todo_entity: !input todo_entity
+  monitored_sensors: !input monitored_sensors
+  alert_threshold: !input alert_threshold
+  panic_threshold: !input panic_threshold
+  cleanup_threshold: !input cleanup_threshold
+  error_states: !input error_states
+
+trigger:
+  # Percentage triggers
+  - platform: template
+    value_template: >
+      {% for e in monitored_sensors.keys() %}
+        {% if states(e) not in error_states and states(e) not in ['unknown','unavailable','none'] and (states(e)|int > alert_threshold) %}
+          true
+        {% endif %}
+      {% endfor %}
+    id: above_alert
+  - platform: template
+    value_template: >
+      {% for e in monitored_sensors.keys() %}
+        {% if states(e) not in error_states and states(e) not in ['unknown','unavailable','none'] and (states(e)|int < cleanup_threshold) %}
+          true
+        {% endif %}
+      {% endfor %}
+    id: below_cleanup
+  # Error/faulty states
+  - platform: template
+    value_template: >
+      {% for e in monitored_sensors.keys() %}
+        {% if states(e) in error_states %}
+          true
+        {% endif %}
+      {% endfor %}
+    id: error_state
+
+condition: []
+
+action:
+  - variables:
+      # Detect which sensors are triggered for which reason
+      triggered_above: >
+        {% set out = namespace(val=[]) %}
+        {% for ent, vals in monitored_sensors.items() %}
+          {% if states(ent) not in error_states and states(ent) not in ['unknown','unavailable','none'] and states(ent)|int > alert_threshold %}
+            {% set _ = out.val.append(ent) %}
+          {% endif %}
+        {% endfor %}
+        {{ out.val }}
+      triggered_below: >
+        {% set out = namespace(val=[]) %}
+        {% for ent, vals in monitored_sensors.items() %}
+          {% if states(ent) not in error_states and states(ent) not in ['unknown','unavailable','none'] and states(ent)|int < cleanup_threshold %}
+            {% set _ = out.val.append(ent) %}
+          {% endif %}
+        {% endfor %}
+        {{ out.val }}
+      triggered_error: >
+        {% set out = namespace(val=[]) %}
+        {% for ent, vals in monitored_sensors.items() %}
+          {% if states(ent) in error_states %}
+            {% set _ = out.val.append(ent) %}
+          {% endif %}
+        {% endfor %}
+        {{ out.val }}
+
+  - choose:
+      # === ADD/UPDATE: Above alert threshold ===
+      - conditions:
+          - condition: trigger
+            id: above_alert
+        sequence:
+          - repeat:
+              for_each: "{{ triggered_above }}"
+              sequence:
+                - variables:
+                    task_summary: "{{ monitored_sensors[repeat.item][0] }}"
+                    emoji: "{{ monitored_sensors[repeat.item][1] }}"
+                    val: "{{ states(repeat.item)|int }}"
+                    prio: >-
+                      {% if val == 100 %}
+                        1
+                      {% else %}
+                        2
+                      {% endif %}
+                    desc: >-
+                      {% if val == 100 %}
+                        🚨💀 MUST EMPTY NOW! {{ emoji }} Level is 100%! Cat mutiny imminent! 💀🚨
+                        😾🐾 *PANIC CAT!* 😱
+                      {% elif val >= panic_threshold %}
+                        🟥 PANIC! {{ emoji }} {{ val }}%. 😾😱 *Panic cat running wild!* 🐾
+                      {% elif val >= 80 %}
+                        Almost full ({{ val }}%). Better empty soon!
+                      {% else %}
+                        Time to empty! ({{ val }}%)
+                      {% endif %}
+                - service: todo.get_items
+                  data:
+                    entity_id: "{{ todo_entity }}"
+                  response_variable: todo_items
+                - variables:
+                    already_exists: >-
+                      {{ todo_items.items | selectattr('summary', 'eq', task_summary) | list | count > 0 }}
+                - condition: template
+                  value_template: "{{ not already_exists }}"
+                - service: todo.add_item
+                  data:
+                    entity_id: "{{ todo_entity }}"
+                    summary: "{{ task_summary }}"
+                    description: "{{ desc }}"
+                    due: "{{ now().date().isoformat() }}T18:00:00"
+                    priority: "{{ prio }}"
+      # === ADD: Error/Fault state ===
+      - conditions:
+          - condition: trigger
+            id: error_state
+        sequence:
+          - repeat:
+              for_each: "{{ triggered_error }}"
+              sequence:
+                - variables:
+                    task_summary: "{{ monitored_sensors[repeat.item][0] }}"
+                    emoji: "{{ monitored_sensors[repeat.item][1] }}"
+                    val: "{{ states(repeat.item) }}"
+                    desc: >-
+                      {{ emoji }} Problem with {{ repeat.item }}: state = "{{ val }}".
+                      😾🐾 *Panic cat is hiding!* 😱
+                - service: todo.get_items
+                  data:
+                    entity_id: "{{ todo_entity }}"
+                  response_variable: todo_items
+                - variables:
+                    already_exists: >-
+                      {{ todo_items.items | selectattr('summary', 'eq', task_summary) | list | count > 0 }}
+                - condition: template
+                  value_template: "{{ not already_exists }}"
+                - service: todo.add_item
+                  data:
+                    entity_id: "{{ todo_entity }}"
+                    summary: "{{ task_summary }}"
+                    description: "{{ desc }}"
+                    due: "{{ now().date().isoformat() }}T18:00:00"
+                    priority: 1
+
+      # === CLEANUP: Below cleanup threshold OR error is cleared ===
+      - conditions: []
+        sequence:
+          - repeat:
+              for_each: "{{ monitored_sensors.keys() }}"
+              sequence:
+                - variables:
+                    task_summary: "{{ monitored_sensors[repeat.item][0] }}"
+                    val: "{{ states(repeat.item) }}"
+                    should_complete: >-
+                      {# cleanup if:
+                          - below threshold and not in error states
+                          - or: now OK but previously error (task lingers)
+                      #}
+                      {{ (val not in error_states and val not in ['unknown','unavailable','none'] and val|int < cleanup_threshold)
+                          or (val not in error_states and val not in ['unknown','unavailable','none']
+                          and (val|int < alert_threshold))
+                      }}
+                - condition: template
+                  value_template: "{{ should_complete }}"
+                - service: todo.get_items
+                  data:
+                    entity_id: "{{ todo_entity }}"
+                  response_variable: todo_items
+                - variables:
+                    task_ids: >-
+                      {{ todo_items.items
+                        | selectattr('summary', 'eq', task_summary)
+                        | map(attribute='uid')
+                        | list }}
+                - condition: template
+                  value_template: "{{ task_ids | length > 0 }}"
+                - repeat:
+                    for_each: "{{ task_ids }}"
+                    sequence:
+                      - service: todo.complete_item
+                        data:
+                          entity_id: "{{ todo_entity }}"
+                          uid: "{{ repeat.item }}"
