@@ -1,0 +1,200 @@
+# /config/jarvis/12_fallback.yaml
+# Error handling, fallback mechanisms, and recovery protocols
+
+counter:
+  jarvis_ai_errors:
+    name: "Jarvis AI Errors"
+    initial: 0
+    step: 1
+    icon: mdi:robot-angry
+  jarvis_script_errors:
+    name: "Jarvis Script Errors"
+    initial: 0
+    step: 1
+    icon: mdi:script-text-outline
+  jarvis_total_operations:
+    name: "Jarvis Total Operations"
+    initial: 1
+    step: 1
+    icon: mdi:counter
+  jarvis_successful_recoveries:
+    name: "Jarvis Successful Recoveries"
+    initial: 0
+    step: 1
+    icon: mdi:backup-restore
+
+input_datetime:
+  last_jarvis_error:
+    name: "Last Jarvis Error"
+    has_date: true
+    has_time: true
+
+input_select:
+  jarvis_recovery_status:
+    name: "Jarvis Recovery Status"
+    options:
+      - "Normal Operation"
+      - "Minor Issues"
+      - "Recovery Mode"
+      - "Emergency Fallback"
+      - "Manual Intervention Required"
+    initial: "Normal Operation"
+
+input_boolean:
+  jarvis_fallback_mode:
+    name: "Jarvis Fallback Mode"
+    icon: mdi:lifebuoy
+  jarvis_error_suppression:
+    name: "Jarvis Error Suppression"
+    icon: mdi:volume-off
+
+template:
+  - sensor:
+      - name: "jarvis_error_status"
+        state: >-
+          {% set ai_errors = states('counter.jarvis_ai_errors') | int(0) %}
+          {% set script_errors = states('counter.jarvis_script_errors') | int(0) %}
+          {% set total_errors = ai_errors + script_errors %}
+          {% if total_errors == 0 %}
+            healthy
+          {% elif total_errors < 5 %}
+            minor_issues
+          {% elif total_errors < 15 %}
+            concerning
+          {% else %}
+            critical
+          {% endif %}
+        attributes:
+          ai_errors: "{{ states('counter.jarvis_ai_errors') }}"
+          script_errors: "{{ states('counter.jarvis_script_errors') }}"
+          total_errors: "{{ states('counter.jarvis_ai_errors') | int(0) + states('counter.jarvis_script_errors') | int(0) }}"
+          last_error_time: "{{ states('input_datetime.last_jarvis_error') }}"
+          error_rate: >-
+            {% set total_ops = states('counter.jarvis_total_operations') | int(1) %}
+            {% set errors = states('counter.jarvis_ai_errors') | int(0) + states('counter.jarvis_script_errors') | int(0) %}
+            {{ (errors / total_ops * 100) | round(2) }}
+          recovery_status: "{{ states('input_select.jarvis_recovery_status') }}"
+  - binary_sensor:
+      - name: "jarvis_functioning_normally"
+        state: >-
+          {{ states('sensor.jarvis_error_status') in ['healthy', 'minor_issues'] and
+             states('input_text.jarvis_chat_response') != 'none' and
+             states('sensor.jarvis_watchdog_status') != 'critical' }}
+
+automation:
+  - id: jarvis_ai_response_error_detection
+    alias: "Jarvis AI Response Error Detection"
+    trigger:
+      - platform: state
+        entity_id: input_text.jarvis_chat_response
+    condition:
+      - condition: template
+        value_template: >-
+          {{ 'error' in states('input_text.jarvis_chat_response') | lower or
+             'failed' in states('input_text.jarvis_chat_response') | lower or
+             states('input_text.jarvis_chat_response') == 'none' or
+             states('input_text.jarvis_chat_response') | length < 10 }}
+    action:
+      - action: counter.increment
+        target:
+          entity_id: counter.jarvis_ai_errors
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.last_jarvis_error
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+      - action: script.jarvis_fallback_handler
+
+  - id: jarvis_critical_error_response
+    alias: "Jarvis Critical Error Response"
+    trigger:
+      - platform: state
+        entity_id: sensor.jarvis_error_status
+        to: 'critical'
+    action:
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.jarvis_recovery_status
+        data:
+          option: "Emergency Fallback"
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.jarvis_fallback_mode
+      - action: script.jarvis_emergency_fallback
+
+  - id: jarvis_automatic_recovery
+    alias: "Jarvis Automatic Recovery"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.jarvis_functioning_normally
+        to: 'off'
+        for:
+          minutes: 5
+    action:
+      - action: script.jarvis_automatic_recovery_attempt
+
+  - id: jarvis_error_rate_monitor
+    alias: "Jarvis Error Rate Monitor"
+    trigger:
+      - platform: time_pattern
+        minutes: "/30"
+    condition:
+      - condition: template
+        value_template: >-
+          {{ state_attr('sensor.jarvis_error_status', 'error_rate') | float > 10 }}
+    action:
+      - action: notify.notify
+        data:
+          title: "⚠️ JARVIS Error Rate High"
+          message: >-
+            Error rate: {{ state_attr('sensor.jarvis_error_status', 'error_rate') }}%
+            AI errors: {{ states('counter.jarvis_ai_errors') }}
+            Script errors: {{ states('counter.jarvis_script_errors') }}
+
+  - id: jarvis_recovery_success_detection
+    alias: "Jarvis Recovery Success Detection"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.jarvis_functioning_normally
+        to: 'on'
+    condition:
+      - condition: state
+        entity_id: input_select.jarvis_recovery_status
+        state:
+          - "Recovery Mode"
+          - "Emergency Fallback"
+    action:
+      - action: counter.increment
+        target:
+          entity_id: counter.jarvis_successful_recoveries
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.jarvis_recovery_status
+        data:
+          option: "Normal Operation"
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.jarvis_fallback_mode
+      - action: notify.notify
+        data:
+          title: "✅ JARVIS Recovery Successful"
+          message: "System functionality restored. Normal operations resumed."
+
+  - id: jarvis_daily_error_reset
+    alias: "Jarvis Daily Error Reset"
+    trigger:
+      - platform: time
+        at: "00:00:00"
+    action:
+      - action: counter.reset
+        target:
+          entity_id: 
+            - counter.jarvis_ai_errors
+            - counter.jarvis_script_errors
+      - condition: state
+        entity_id: input_select.jarvis_recovery_status
+        state: "Normal Operation"
+      - action: notify.notify
+        data:
+          title: "🔄 JARVIS Daily Reset"
+          message: "Error counters reset. System monitoring continues."

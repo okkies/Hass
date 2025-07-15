@@ -1,0 +1,152 @@
+# /config/jarvis/06_actions.yaml
+# Action scripts for Jarvis home control
+
+# =====================================
+# ACTION PROMPT TEMPLATES
+# =====================================
+template:
+  - sensor:
+      - name: "jarvis_action_templates"
+        state: "ready"
+        attributes:
+          status_check_prompt: >-
+            JARVIS SYSTEM STATUS CHECK
+            
+            Current system overview:
+            - Total entities: {{ state_attr('sensor.jarvis_system_info', 'total_entities') }}
+            - Unavailable: {{ state_attr('sensor.jarvis_system_info', 'unavailable_entities') }}
+            - Low batteries: {{ state_attr('sensor.jarvis_system_info', 'low_batteries') }}
+            - Active automations: {{ state_attr('sensor.jarvis_automation_status', 'active_automations') | length }}
+            - Lights on: {{ states.light | selectattr('state', '==', 'on') | list | length }}
+            - Time: {{ now().strftime('%H:%M on %A') }}
+            
+            Provide a brief system status summary in Dutch, Jarvis-style.
+            Mention any issues that need attention.
+            Keep it concise but informative.
+
+          home_control_prompt: >-
+            JARVIS HOME CONTROL ASSISTANCE
+            
+            User requested home control action. Current status:
+            - Lights: {{ states.light | selectattr('state', '==', 'on') | list | length }} on
+            - Covers: {{ states.cover | list | length }} available
+            - Climate: {{ states.climate | list | length }} zones
+            - Switches: {{ states.switch | selectattr('state', '==', 'on') | list | length }} active
+            
+            Available Jarvis actions:
+            - jarvis_turn_off_all_lights
+            - jarvis_night_mode  
+            - jarvis_morning_routine
+            - close_all_curtains / open_all_curtains
+            - jarvis_panic_protocol
+            
+            Help the user choose the right action or suggest alternatives.
+            Respond as Jarvis in Dutch.
+
+# =====================================
+# ACTION AUTOMATION TRIGGERS
+# =====================================
+automation:
+  - id: jarvis_telegram_commands
+    alias: "Jarvis Voice Commands via Telegram"
+    trigger:
+      - platform: event
+        event_type: telegram_text
+    condition:
+      - condition: template
+        value_template: >-
+          {{ trigger.event.data.text | lower in [
+            'lights off', 'lichten uit', 'jarvis lights off',
+            'night mode', 'nachtmodus', 'jarvis night mode',
+            'morning', 'goedemorgen', 'jarvis morning',
+            'status', 'status check', 'jarvis status'
+          ] }}
+    action:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ 'lights off' in trigger.event.data.text | lower or 'lichten uit' in trigger.event.data.text | lower }}"
+            sequence:
+              - action: script.jarvis_turn_off_all_lights
+          - conditions:
+              - condition: template
+                value_template: "{{ 'night mode' in trigger.event.data.text | lower or 'nachtmodus' in trigger.event.data.text | lower }}"
+            sequence:
+              - action: script.jarvis_night_mode
+          - conditions:
+              - condition: template
+                value_template: "{{ 'morning' in trigger.event.data.text | lower or 'goedemorgen' in trigger.event.data.text | lower }}"
+            sequence:
+              - action: script.jarvis_morning_routine
+          - conditions:
+              - condition: template
+                value_template: "{{ 'status' in trigger.event.data.text | lower }}"
+            sequence:
+              - action: script.jarvis_system_status_check
+      - action: telegram_bot.send_message
+        data:
+          target: "{{ trigger.event.data.chat_id }}"
+          message: "✅ Jarvis executed: {{ trigger.event.data.text }}"
+
+  - id: jarvis_auto_night_mode
+    alias: "Jarvis Auto Night Mode"
+    trigger:
+      - platform: time
+        at: "23:30:00"
+    condition:
+      - condition: not
+        conditions:
+          - condition: state
+            entity_id: person.user
+            state: 'not_home'
+    action:
+      - action: conversation.process
+        data:
+          agent_id: conversation.home_assistant
+          text: >-
+            JARVIS AUTO NIGHT MODE CHECK
+            
+            Time: {{ now().strftime('%H:%M') }}
+            Lights on: {{ states.light | selectattr('state', '==', 'on') | list | length }}
+            Motion detected: {{ states.binary_sensor | selectattr('attributes.device_class', '==', 'motion') | selectattr('state', '==', 'on') | list | length }} sensors
+            
+            Should I activate night mode automatically?
+            Consider if people are likely still active or settling down for sleep.
+            Respond with recommendation in Dutch.
+        response_variable: jarvis_response
+      - delay:
+          seconds: 5
+      - action: notify.notify
+        data:
+          title: "🌙 Jarvis Night Mode Check"
+          message: "{{ jarvis_response.response.speech.plain.speech }}"
+
+  - id: jarvis_emergency_detection
+    alias: "Jarvis Emergency Detection"
+    trigger:
+      - platform: state
+        entity_id: 
+          - binary_sensor.smoke_detector
+          - binary_sensor.water_leak_sensor
+        to: 'on'
+    action:
+      - action: script.jarvis_panic_protocol
+      - action: conversation.process
+        data:
+          agent_id: conversation.home_assistant
+          text: >-
+            JARVIS EMERGENCY PROTOCOL ACTIVATED
+            
+            Emergency detected: {{ trigger.entity_id }}
+            Trigger: {{ trigger.to_state.state }}
+            Time: {{ now().strftime('%H:%M:%S') }}
+            
+            Provide immediate emergency response instructions in Dutch.
+            Keep it clear and actionable.
+        response_variable: jarvis_response
+      - delay:
+          seconds: 3
+      - action: telegram_bot.send_message
+        data:
+          target: 409230174
+          message: "🚨 EMERGENCY: {{ trigger.entity_id }} - {{ jarvis_response.response.speech.plain.speech }}"

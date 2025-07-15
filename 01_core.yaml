@@ -1,0 +1,61 @@
+# /config/jarvis/01_core.yaml
+# Core Jarvis sensors and basic shell commands
+
+# =====================================
+# CORE SYSTEM SENSORS
+# =====================================
+# /config/jarvis/01_core.yaml
+# Core Jarvis sensors and basic shell commands
+
+# =====================================
+# CORE SYSTEM SENSORS
+# =====================================
+template:
+  - sensor:
+      - name: "jarvis_system_info"
+        state: "online"
+        attributes:
+          total_entities: "{{ states | length }}"
+          automations_count: "{{ states.automation | list | length }}"
+          scripts_count: "{{ states.script | list | length }}"
+          sensors_count: "{{ states.sensor | list | length }}"
+          lights_count: "{{ states.light | list | length }}"
+          switches_count: "{{ states.switch | list | length }}"
+          battery_devices: "{{ states.sensor | selectattr('attributes.device_class', '==', 'battery') | list | length }}"
+          low_batteries: "{{ states.sensor | selectattr('attributes.device_class', '==', 'battery') | selectattr('state', 'lt', '20') | list | length }}"
+          critical_batteries: "{{ states.sensor | selectattr('attributes.device_class', '==', 'battery') | selectattr('state', 'lt', '10') | list | length }}"
+          zigbee_devices: "{{ states | selectattr('attributes.via_device', 'defined') | list | length }}"
+          unavailable_entities: "{{ states | selectattr('state', '==', 'unavailable') | list | length }}"
+          unknown_entities: "{{ states | selectattr('state', '==', 'unknown') | list | length }}"
+
+      - name: "jarvis_automation_status"
+        state: "monitoring"
+        attributes:
+          active_automations: >-
+            {{ states.automation | selectattr('state', '==', 'on') | map(attribute='entity_id') | list }}
+          disabled_automations: >-
+            {{ states.automation | selectattr('state', '==', 'off') | map(attribute='entity_id') | list }}
+          recent_triggers: >-
+            {{ states.automation
+              | selectattr('attributes.last_triggered', 'defined')
+              | sort(attribute='attributes.last_triggered', reverse=true)
+              | map(attribute='entity_id') | list[:5] }}
+
+      - name: "jarvis_activity_monitor"
+        state: "tracking"
+        attributes:
+          recent_scripts: >-
+            {{ states.script | selectattr('attributes.last_triggered', 'defined') | sort(attribute='attributes.last_triggered', reverse=true) | map(attribute='entity_id') | list[:5] }}
+          last_ai_response: "{{ states('input_text.jarvis_chat_response') }}"
+          jarvis_uptime: "{{ (now() - states('sensor.uptime') | as_datetime).total_seconds() if states('sensor.uptime') != 'unknown' else 0 }}"
+
+# =====================================
+# BASIC SHELL COMMANDS
+# =====================================
+shell_command:
+  jarvis_read_config: "head -50 /config/configuration.yaml"
+  jarvis_read_automations: "head -100 /config/automations.yaml"
+  jarvis_read_scripts: "head -100 /config/scripts.yaml"
+  jarvis_system_stats: "df -h /config && free -h"
+  jarvis_list_integrations: "ls /config/custom_components/"
+  jarvis_check_config: "ha core check"

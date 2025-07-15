@@ -1,0 +1,122 @@
+# /config/jarvis/07_watchdog.yaml
+# System monitoring, alerts and health checks
+
+template:
+  - sensor:
+      - name: "jarvis_watchdog_status"
+        state: >-
+          {% set unavailable = state_attr('sensor.jarvis_system_info', 'unavailable_entities') | int(0) %}
+          {% set critical_batteries = state_attr('sensor.jarvis_system_info', 'critical_batteries') | int(0) %}
+          {% if unavailable > 20 or critical_batteries > 5 %}
+            critical
+          {% elif unavailable > 10 or critical_batteries > 2 %}
+            warning
+          {% elif unavailable > 5 or critical_batteries > 0 %}
+            attention
+          {% else %}
+            healthy
+          {% endif %}
+        attributes:
+          health_score: >-
+            {% set unavailable = state_attr('sensor.jarvis_system_info', 'unavailable_entities') | int(0) %}
+            {% set total = state_attr('sensor.jarvis_system_info', 'total_entities') | int(1) %}
+            {{ ((total - unavailable) / total * 100) | round(1) }}
+          issues_detected: >-
+            {% set issues = [] %}
+            {% if state_attr('sensor.jarvis_system_info', 'unavailable_entities') | int(0) > 5 %}
+              {% set issues = issues + ['High unavailable entities'] %}
+            {% endif %}
+            {% if state_attr('sensor.jarvis_system_info', 'critical_batteries') | int(0) > 0 %}
+              {% set issues = issues + ['Critical battery levels'] %}
+            {% endif %}
+            {{ issues }}
+          last_check: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+  - binary_sensor:
+      - name: "jarvis_system_healthy"
+        state: >-
+          {{ states('sensor.jarvis_watchdog_status') == 'healthy' }}
+
+automation:
+  - id: jarvis_watchdog_unavailable_check
+    alias: "Jarvis Watchdog - Unavailable Entities Check"
+    trigger:
+      - platform: time_pattern
+        minutes: "/15"
+    condition:
+      - condition: template
+        value_template: >-
+          {{ state_attr('sensor.jarvis_system_info', 'unavailable_entities') | int > 5 }}
+    action:
+      - action: notify.notify
+        data:
+          title: "⚠️ Jarvis Watchdog Alert"
+          message: >-
+            {{ state_attr('sensor.jarvis_system_info', 'unavailable_entities') }} entities unavailable.
+            System health: {{ state_attr('sensor.jarvis_watchdog_status', 'health_score') }}%
+
+  - id: jarvis_watchdog_battery_alert
+    alias: "Jarvis Watchdog - Critical Battery Alert"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.jarvis_system_info
+        attribute: critical_batteries
+        above: 0
+    action:
+      - action: notify.notify
+        data:
+          title: "🔋 JARVIS CRITICAL BATTERY"
+          message: "{{ trigger.to_state.attributes.critical_batteries }} critical batteries need immediate replacement"
+      - action: todo.add_item
+        target:
+          entity_id: todo.m365_huis
+        data:
+          item: "🔋 URGENT: {{ trigger.to_state.attributes.critical_batteries }} critical batteries need immediate replacement"
+
+  - id: jarvis_watchdog_integration_health
+    alias: "Jarvis Watchdog - Integration Health Check"
+    trigger:
+      - platform: time
+        at: "06:00:00"
+    action:
+      - action: shell_command.jarvis_system_stats
+      - condition: template
+        value_template: "{{ state_attr('sensor.jarvis_watchdog_status', 'health_score') | float < 95 }}"
+      - action: notify.notify
+        data:
+          title: "📊 Jarvis Daily Health Report"
+          message: "System health: {{ state_attr('sensor.jarvis_watchdog_status', 'health_score') }}% - Needs attention"
+
+  - id: jarvis_watchdog_performance_monitoring
+    alias: "Jarvis Watchdog - Performance Monitoring"
+    trigger:
+      - platform: time_pattern
+        hours: "/2"
+    condition:
+      - condition: template
+        value_template: >-
+          {{ state_attr('sensor.jarvis_system_info', 'unavailable_entities') | int > 
+             (state_attr('sensor.jarvis_system_info', 'total_entities') | int * 0.1) }}
+    action:
+      - action: notify.notify
+        data:
+          title: "📉 Jarvis Performance Alert"
+          message: >-
+            Performance degradation detected: 
+            {{ (state_attr('sensor.jarvis_system_info', 'unavailable_entities') | int / state_attr('sensor.jarvis_system_info', 'total_entities') | int * 100) | round(1) }}% entities unavailable
+
+  - id: jarvis_watchdog_emergency_recovery
+    alias: "Jarvis Watchdog - Emergency Recovery"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.jarvis_system_info
+        attribute: unavailable_entities
+        above: 50
+    action:
+      - action: notify.notify
+        data:
+          title: "🚨 JARVIS EMERGENCY MODE"
+          message: >-
+            CRITICAL: {{ trigger.to_state.attributes.unavailable_entities }} entities unavailable!
+            Emergency recovery protocol may be needed.
+      - action: script.jarvis_emergency_recovery
+        continue_on_error: true

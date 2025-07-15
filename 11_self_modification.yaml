@@ -1,0 +1,162 @@
+# /config/jarvis/11_self_modification.yaml
+# Advanced self-improvement and autonomous development
+
+shell_command:
+  jarvis_read_full_scripts: "cat /config/scripts.yaml"
+  jarvis_read_jarvis_modules: 'find /config/jarvis -name "*.yaml" -exec echo "=== {} ===" \; -exec cat {} \;'
+  jarvis_list_all_yaml_files: 'find /config -maxdepth 3 -name "*.yaml" -type f'
+  jarvis_analyze_config_structure: 'wc -l /config/*.yaml 2>/dev/null | sort -nr'
+  jarvis_check_yaml_syntax: 'ha core check --config /config'
+
+input_boolean:
+  jarvis_autonomous_learning:
+    name: "Jarvis Autonomous Learning"
+    icon: mdi:brain
+  jarvis_autonomous_development:
+    name: "Jarvis Autonomous Development"
+    icon: mdi:code-braces
+  jarvis_self_optimization:
+    name: "Jarvis Self-Optimization"
+    icon: mdi:tune
+  jarvis_adaptive_automation:
+    name: "Jarvis Adaptive Automation"
+    icon: mdi:robot-industrial
+  jarvis_safe_mode:
+    name: "Jarvis Safe Mode"
+    icon: mdi:shield-check
+    initial: true
+
+input_select:
+  jarvis_modification_mode:
+    name: "Jarvis Modification Mode"
+    options:
+      - "Disabled"
+      - "Analysis Only"
+      - "Supervised"
+    initial: "Analysis Only"
+    icon: mdi:cog
+  jarvis_safety_level:
+    name: "Jarvis Safety Level"
+    options:
+      - "Safe"
+      - "Moderate" 
+    initial: "Safe"
+    icon: mdi:security
+
+input_datetime:
+  last_jarvis_improvement:
+    name: "Last Jarvis Improvement"
+    has_date: true
+    has_time: true
+
+counter:
+  jarvis_learning_sessions:
+    name: "Jarvis Learning Sessions"
+    initial: 0
+    step: 1
+    icon: mdi:school
+  jarvis_improvements_made:
+    name: "Jarvis Improvements Made"
+    initial: 0
+    step: 1
+    icon: mdi:trending-up
+  jarvis_successful_automations:
+    name: "Jarvis Successful Automations"
+    initial: 0
+    step: 1
+  jarvis_total_automations:
+    name: "Jarvis Total Automations"
+    initial: 1
+    step: 1
+
+template:
+  - sensor:
+      - name: "jarvis_self_modification_status"
+        state: "monitoring"
+        attributes:
+          modification_mode: "{{ states('input_select.jarvis_modification_mode') }}"
+          safety_level: "{{ states('input_select.jarvis_safety_level') }}"
+          last_self_improvement: "{{ states('input_datetime.last_jarvis_improvement') }}"
+          current_restrictions: >-
+            {% if states('input_select.jarvis_safety_level') == 'Safe' %}
+            ["analysis_only", "no_file_modification", "human_approval_required"]
+            {% else %}
+            ["backup_before_changes", "validation_required", "limited_scope"]
+            {% endif %}
+      - name: "jarvis_learning_progress"
+        state: "active"
+        attributes:
+          learning_sessions: "{{ states('counter.jarvis_learning_sessions') | int(0) }}"
+          improvements_made: "{{ states('counter.jarvis_improvements_made') | int(0) }}"
+          automation_success_rate: >-
+            {{ ((states('counter.jarvis_successful_automations') | int(0)) / 
+                (states('counter.jarvis_total_automations') | int(1)) * 100) | round(1) }}
+
+automation:
+  - id: jarvis_autonomous_learning_cycle
+    alias: "Jarvis Autonomous Learning Cycle"
+    trigger:
+      - platform: time
+        at: "02:00:00"
+    condition:
+      - condition: time
+        weekday:
+          - sun
+      - condition: state
+        entity_id: input_boolean.jarvis_autonomous_learning
+        state: 'on'
+    action:
+      - action: counter.increment
+        target:
+          entity_id: counter.jarvis_learning_sessions
+      - action: script.jarvis_system_self_improvement
+
+  - id: jarvis_self_diagnostic_improvement
+    alias: "Jarvis Self-Diagnostic and Improvement"
+    trigger:
+      - platform: state
+        entity_id: sensor.jarvis_watchdog_status
+        to: 'warning'
+        for:
+          minutes: 30
+    action:
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.last_jarvis_improvement
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+      - action: counter.increment
+        target:
+          entity_id: counter.jarvis_improvements_made
+      - action: todo.add_item
+        target:
+          entity_id: todo.m365_automations
+        data:
+          item: "🧠 JARVIS Self-Improvement: System degradation detected - analysis needed"
+
+  - id: jarvis_safety_override
+    alias: "Jarvis Safety Override"
+    trigger:
+      - platform: state
+        entity_id: input_boolean.jarvis_safe_mode
+        to: 'on'
+    action:
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.jarvis_modification_mode
+        data:
+          option: "Analysis Only"
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.jarvis_safety_level
+        data:
+          option: "Safe"
+      - action: input_boolean.turn_off
+        target:
+          entity_id:
+            - input_boolean.jarvis_autonomous_development
+            - input_boolean.jarvis_adaptive_automation
+      - action: notify.notify
+        data:
+          title: "🛡️ JARVIS SAFE MODE"
+          message: "Safe mode activated. All autonomous modifications disabled."

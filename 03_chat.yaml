@@ -1,0 +1,229 @@
+# /config/jarvis/09_telegram.yaml
+# Telegram bot integration for remote Jarvis control - Updated for HA 2025.7
+
+# /config/jarvis/03_chat.yaml
+# Enhanced Jarvis chat interface with multiple modes - FULLY 2025.7 COMPLIANT
+
+# =====================================
+# CHAT INPUT HELPERS
+# =====================================
+input_text:
+  jarvis_chat_input:
+    name: "Chat with Jarvis"
+    max: 255
+    icon: mdi:robot
+
+  jarvis_chat_response:
+    name: "Jarvis Response"
+    max: 255
+    icon: mdi:chat-processing
+
+  jarvis_chat_history:
+    name: "Chat History"
+    max: 255
+    icon: mdi:history
+
+input_boolean:
+  jarvis_chat_enabled:
+    name: "Jarvis Chat Interface"
+    icon: mdi:chat
+
+  jarvis_omniscient_mode:
+    name: "Jarvis Omniscient Mode"
+    icon: mdi:eye-circle
+
+  jarvis_proactive_mode:
+    name: "Jarvis Proactive Suggestions"
+    icon: mdi:lightbulb-auto
+
+  jarvis_debug_mode:
+    name: "Jarvis Debug Mode"
+    icon: mdi:bug
+
+input_select:
+  jarvis_chat_mode:
+    name: "Jarvis Chat Mode"
+    options:
+      - "Assistant"
+      - "System Analysis"
+      - "Automation Creation"
+      - "Troubleshooting"
+      - "Learning Mode"
+      - "Home Control"
+    initial: "Assistant"
+    icon: mdi:robot-excited
+
+  jarvis_personality:
+    name: "Jarvis Personality"
+    options:
+      - "Professional"
+      - "Witty"
+      - "Technical"
+      - "Friendly"
+    initial: "Witty"
+    icon: mdi:emoticon
+
+# =====================================
+# CHAT STATUS SENSORS
+# =====================================
+template:
+  - sensor:
+      - name: "jarvis_chat_status"
+        state: >-
+          {% if is_state('input_boolean.jarvis_chat_enabled', 'on') %}
+            online
+          {% else %}
+            offline
+          {% endif %}
+        attributes:
+          mode: "{{ states('input_select.jarvis_chat_mode') }}"
+          personality: "{{ states('input_select.jarvis_personality') }}"
+          omniscient: "{{ states('input_boolean.jarvis_omniscient_mode') }}"
+          proactive: "{{ states('input_boolean.jarvis_proactive_mode') }}"
+          debug: "{{ states('input_boolean.jarvis_debug_mode') }}"
+          last_interaction: "{{ now().strftime('%Y-%m-%d %H:%M') }}"
+          conversation_count: "{{ states('input_text.jarvis_chat_history') | length }}"
+
+# =====================================
+# CHAT AUTOMATIONS
+# =====================================
+automation:
+  - id: jarvis_chat_processor
+    alias: "Jarvis Chat Processor"
+    trigger:
+      - trigger: state
+        entity_id: input_text.jarvis_chat_input
+    condition:
+      - condition: template
+        value_template: "{{ trigger.to_state.state != trigger.from_state.state }}"
+      - condition: template
+        value_template: "{{ trigger.to_state.state | length > 0 }}"
+      - condition: state
+        entity_id: input_boolean.jarvis_chat_enabled
+        state: "on"
+    action:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.jarvis_chat_response
+        data:
+          value: "Jarvis is processing your request..."
+      - action: conversation.process
+        data:
+          agent_id: conversation.home_assistant
+          text: >-
+            JARVIS CHAT INTERFACE ACTIVE
+
+            User Query: {{ states('input_text.jarvis_chat_input') }}
+
+            PERSONALITY: {{ states('input_select.jarvis_personality') }}
+            CHAT MODE: {{ states('input_select.jarvis_chat_mode') }}
+            OMNISCIENT: {{ 'Active' if is_state('input_boolean.jarvis_omniscient_mode', 'on') else 'Inactive' }}
+            DEBUG: {{ 'Active' if is_state('input_boolean.jarvis_debug_mode', 'on') else 'Inactive' }}
+
+            CURRENT SYSTEM CONTEXT:
+            - Time: {{ now().strftime('%A, %B %d, %Y at %H:%M') }}
+            - System entities: {{ state_attr('sensor.jarvis_system_info', 'total_entities') | default(0) }}
+            - Active automations: {{ state_attr('sensor.jarvis_automation_status', 'active_automations') | default([]) | length }}
+            - Low batteries: {{ state_attr('sensor.jarvis_system_info', 'low_batteries') | default(0) }}
+            - System health: {{ state_attr('sensor.jarvis_system_info', 'unavailable_entities') | default(0) }} issues
+
+            {% if is_state('input_select.jarvis_chat_mode', 'System Analysis') %}
+            SYSTEM ANALYSIS MODE: Provide detailed technical analysis and system insights.
+            {% elif is_state('input_select.jarvis_chat_mode', 'Automation Creation') %}
+            AUTOMATION CREATION MODE: Help create new automations and scripts. Offer to generate YAML.
+            {% elif is_state('input_select.jarvis_chat_mode', 'Troubleshooting') %}
+            TROUBLESHOOTING MODE: Diagnose and solve system issues step by step.
+            {% elif is_state('input_select.jarvis_chat_mode', 'Learning Mode') %}
+            LEARNING MODE: Explain concepts and provide educational insights with examples.
+            {% elif is_state('input_select.jarvis_chat_mode', 'Home Control') %}
+            HOME CONTROL MODE: Help control devices, scenes, and automations. Offer to execute actions.
+            {% else %}
+            ASSISTANT MODE: Provide helpful, conversational assistance.
+            {% endif %}
+
+            {% if is_state('input_select.jarvis_personality', 'Professional') %}
+            Personality: Professional, efficient, formal tone.
+            {% elif is_state('input_select.jarvis_personality', 'Technical') %}
+            Personality: Technical, detailed, use proper terminology.
+            {% elif is_state('input_select.jarvis_personality', 'Friendly') %}
+            Personality: Warm, supportive, encouraging tone.
+            {% else %}
+            Personality: Confident, helpful, and slightly witty like the real Jarvis.
+            {% endif %}
+
+            Respond as Jarvis with the specified personality and mode.
+            Provide actionable information when possible.
+            Keep responses conversational but informative.
+
+            If the user asks for system actions, explain what I can do and offer to execute.
+            If debug mode is active, include technical details about the request processing.
+        response_variable: jarvis_response
+      - delay:
+          seconds: 8
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.jarvis_chat_response
+        data:
+          value: "{{ jarvis_response.response.speech.plain.speech }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.jarvis_chat_history
+        data:
+          value: >-
+            {{ now().strftime('%H:%M') }} You: {{ states('input_text.jarvis_chat_input') }}
+            {{ now().strftime('%H:%M') }} Jarvis: {{ jarvis_response.response.speech.plain.speech[:200] }}...
+
+            {{ states('input_text.jarvis_chat_history') }}
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.jarvis_chat_input
+        data:
+          value: ""
+
+  - id: jarvis_proactive_suggestions
+    alias: "Jarvis Proactive Suggestions"
+    trigger:
+      - trigger: time_pattern
+        hours: "/4"
+    condition:
+      - condition: state
+        entity_id: input_boolean.jarvis_proactive_mode
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.jarvis_chat_enabled
+        state: "on"
+    action:
+      - action: conversation.process
+        data:
+          agent_id: conversation.home_assistant
+          text: >-
+            JARVIS PROACTIVE SUGGESTION MODE
+
+            Current time: {{ now().strftime('%H:%M on %A') }}
+
+            System status check:
+            - Batteries needing attention: {{ state_attr('sensor.jarvis_system_info', 'low_batteries') | default(0) }}
+            - System issues: {{ state_attr('sensor.jarvis_system_info', 'unavailable_entities') | default(0) }}
+            - Active automations: {{ state_attr('sensor.jarvis_automation_status', 'active_automations') | default([]) | length }}
+
+            Based on current system state and time of day, provide a brief proactive suggestion.
+
+            Consider:
+            - Time-appropriate recommendations (morning vs evening)
+            - System maintenance that might be needed
+            - Optimization opportunities
+            - User convenience improvements
+
+            Keep it brief (1-2 sentences) and actionable.
+            Only suggest if there's something genuinely useful to recommend.
+            If nothing urgent, provide an encouraging status update.
+
+            Use {{ states('input_select.jarvis_personality') }} personality style.
+        response_variable: jarvis_response
+      - delay:
+          seconds: 6
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.jarvis_chat_response
+        data:
+          value: "💡 Proactive suggestion: {{ jarvis_response.response.speech.plain.speech }}"

@@ -1,0 +1,110 @@
+# /config/jarvis/02_automations.yaml
+# Core Jarvis automations - daily operations
+
+# Fix for the Jarvis Bootstrap Init automation
+
+# REPLACE the trigger section in 02_automations.yaml:
+
+# Replace the bootstrap automation in 02_automations.yaml with this:
+
+automation:
+  - id: jarvis_bootstrap_init_fixed
+    alias: "Jarvis Bootstrap Init"
+    trigger:
+      - platform: time_pattern
+        seconds: "/30"
+    condition:
+      - condition: template
+        value_template: >-
+          {{ states('sensor.uptime') != 'unknown' and
+             (now() - states('sensor.uptime') | as_datetime).total_seconds() < 60 }}
+    action:
+      - action: notify.notify
+        data:
+          title: "🤖 JARVIS ONLINE"
+          message: "All systems operational. Ready to serve, sir."
+      - action: script.jarvis_system_status_check
+        continue_on_error: true
+
+  - id: jarvis_morning_briefing
+    alias: "Jarvis Morning Briefing"
+    trigger:
+      - platform: time
+        at: "08:00:00"
+    condition:
+      - condition: time
+        weekday:
+          - mon
+          - tue
+          - wed
+          - thu
+          - fri
+    action:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.jarvis_chat_response
+        data:
+          value: >-
+            🌅 Good morning! System status:
+            - Battery alerts: {{ state_attr('sensor.jarvis_system_info', 'low_batteries') }} devices
+            - System health: {{ state_attr('sensor.jarvis_system_info', 'unavailable_entities') }} issues
+            - Weather: {{ states('weather.home') if states('weather.home') != 'unavailable' else 'Unknown' }}
+
+            Have a great day, sir!
+      - action: notify.notify
+        data:
+          title: "🌅 Jarvis Morning Briefing"
+          message: "{{ states('input_text.jarvis_chat_response') }}"
+
+  - id: jarvis_evening_security
+    alias: "Jarvis Evening Security Check"
+    trigger:
+      - platform: time
+        at: "22:00:00"
+    action:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.jarvis_chat_response
+        data:
+          value: >-
+            🔒 Evening security check:
+            - Doors: {{ states.binary_sensor | selectattr('attributes.device_class', '==', 'door') | selectattr('state', '==', 'on') | list | length }} open
+            - Lights: {{ states.light | selectattr('state', '==', 'on') | list | length }} still on
+            - System health: {{ state_attr('sensor.jarvis_system_info', 'unavailable_entities') }} issues
+
+            Good evening, sir.
+      - action: notify.notify
+        data:
+          title: "🔒 Jarvis Security Report"
+          message: "{{ states('input_text.jarvis_chat_response') }}"
+
+  - id: jarvis_proactive_monitoring
+    alias: "Jarvis Proactive Monitoring"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.jarvis_system_info
+        attribute: unavailable_entities
+        above: 5
+    action:
+      - action: notify.notify
+        data:
+          title: "⚠️ JARVIS: System Alert"
+          message: "{{ trigger.to_state.attributes.unavailable_entities }} unavailable entities detected. System needs attention."
+      - action: todo.add_item
+        target:
+          entity_id: todo.m365_automations
+        data:
+          item: "⚠️ Jarvis Alert: {{ trigger.to_state.attributes.unavailable_entities }} unavailable entities - investigate"
+
+  - id: jarvis_weekly_analysis
+    alias: "Jarvis Weekly Deep Analysis"
+    trigger:
+      - platform: time
+        at: "03:00:00"
+    condition:
+      - condition: time
+        weekday:
+          - sun
+    action:
+      - action: script.jarvis_deep_system_analysis
+        continue_on_error: true

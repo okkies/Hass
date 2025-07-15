@@ -1,0 +1,142 @@
+# /config/jarvis/08_backup.yaml
+# Backup systems and recovery mechanisms
+
+shell_command:
+  jarvis_backup_config: "cp /config/configuration.yaml /config/configuration.yaml.backup.$(date +%Y%m%d)"
+  jarvis_backup_scripts: "cp /config/scripts.yaml /config/scripts.yaml.backup.$(date +%Y%m%d)"
+  jarvis_backup_automations: "cp /config/automations.yaml /config/automations.yaml.backup.$(date +%Y%m%d)"
+  jarvis_backup_secrets: "cp /config/secrets.yaml /config/secrets.yaml.backup.$(date +%Y%m%d)"
+  jarvis_backup_jarvis_dir: "tar -czf /config/jarvis_backup_$(date +%Y%m%d_%H%M).tar.gz /config/jarvis/"
+  jarvis_backup_packages_dir: "tar -czf /config/packages_backup_$(date +%Y%m%d_%H%M).tar.gz /config/packages/ 2>/dev/null || echo 'No packages dir'"
+  jarvis_restore_config: "cp /config/configuration.yaml.backup /config/configuration.yaml"
+  jarvis_restore_scripts: "cp /config/scripts.yaml.backup /config/scripts.yaml"
+  jarvis_restore_automations: "cp /config/automations.yaml.backup /config/automations.yaml"
+  jarvis_cleanup_backups: "find /config -name '*.backup.*' -mtime +7 -delete 2>/dev/null || echo 'Cleanup complete'"
+  jarvis_capture_system_state: "echo 'System State: $(date)' > /config/system_state.log && ha core info >> /config/system_state.log"
+
+input_datetime:
+  last_backup_time:
+    name: "Last Backup Time"
+    has_date: true
+    has_time: true
+
+input_boolean:
+  jarvis_recovery_mode:
+    name: "Jarvis Recovery Mode"
+    icon: mdi:backup-restore
+
+input_select:
+  jarvis_recovery_option:
+    name: "Recovery Option"
+    options:
+      - "No Recovery Needed"
+      - "Configuration Only"
+      - "Scripts Only"
+      - "Automations Only"
+      - "Jarvis Modules Only"
+      - "Full System Recovery"
+    initial: "No Recovery Needed"
+
+template:
+  - sensor:
+      - name: "jarvis_backup_status"
+        state: >-
+          {% if states('input_datetime.last_backup_time') %}
+            {% set last_backup = states('input_datetime.last_backup_time') | as_datetime %}
+            {% set hours_ago = (now() - last_backup).total_seconds() / 3600 %}
+            {% if hours_ago < 25 %}
+              recent
+            {% elif hours_ago < 49 %}
+              overdue
+            {% else %}
+              critical
+            {% endif %}
+          {% else %}
+            unknown
+          {% endif %}
+        attributes:
+          last_backup_time: "{{ states('input_datetime.last_backup_time') }}"
+          backup_health: >-
+            {% set hours_ago = (now() - states('input_datetime.last_backup_time') | as_datetime).total_seconds() / 3600 if states('input_datetime.last_backup_time') %}
+            {% if hours_ago < 25 %}
+              excellent
+            {% elif hours_ago < 49 %}
+              good
+            {% else %}
+              needs_attention
+            {% endif %}
+
+automation:
+  - id: jarvis_daily_backup
+    alias: "Jarvis Daily Backup"
+    trigger:
+      - platform: time
+        at: "04:00:00"
+    action:
+      - action: shell_command.jarvis_backup_config
+      - action: shell_command.jarvis_backup_scripts
+      - action: shell_command.jarvis_backup_automations
+      - action: shell_command.jarvis_backup_secrets
+      - action: shell_command.jarvis_backup_jarvis_dir
+      - action: shell_command.jarvis_capture_system_state
+      - delay:
+          seconds: 5
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.last_backup_time
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+      - action: notify.notify
+        data:
+          title: "📦 JARVIS Backup Complete"
+          message: "Daily configuration backup completed successfully at {{ now().strftime('%H:%M') }}"
+
+  - id: jarvis_weekly_backup_cleanup
+    alias: "Jarvis Weekly Backup Cleanup"
+    trigger:
+      - platform: time
+        at: "05:00:00"
+    condition:
+      - condition: time
+        weekday:
+          - sun
+    action:
+      - action: shell_command.jarvis_cleanup_backups
+      - action: notify.notify
+        data:
+          title: "🗑️ Jarvis Backup Cleanup"
+          message: "Weekly backup cleanup completed. Old backups removed."
+
+  - id: jarvis_emergency_recovery_backup
+    alias: "Jarvis Emergency Recovery"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.jarvis_system_info
+        attribute: unavailable_entities
+        above: 50
+    condition:
+      - condition: template
+        value_template: "{{ states('sensor.jarvis_backup_status') == 'recent' }}"
+    action:
+      - action: notify.notify
+        data:
+          title: "🆘 JARVIS EMERGENCY RECOVERY"
+          message: >-
+            CRITICAL: {{ trigger.to_state.attributes.unavailable_entities }} entities unavailable!
+            Emergency recovery protocol available.
+
+  - id: jarvis_pre_update_backup
+    alias: "Jarvis Pre-Update Backup"
+    trigger:
+      - platform: event
+        event_type: supervisor_update
+    action:
+      - action: shell_command.jarvis_backup_config
+      - action: shell_command.jarvis_backup_scripts
+      - action: shell_command.jarvis_backup_automations
+      - action: shell_command.jarvis_backup_jarvis_dir
+      - action: shell_command.jarvis_capture_system_state
+      - action: notify.notify
+        data:
+          title: "🔄 Jarvis Pre-Update Backup"
+          message: "System backup created before update. Safety protocols active."

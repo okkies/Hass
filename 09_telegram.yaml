@@ -1,0 +1,343 @@
+input_boolean:
+  jarvis_telegram_daily_summary:
+    name: "Jarvis Telegram Daily Summary"
+    icon: mdi:telegram
+  jarvis_telegram_emergency_alerts:
+    name: "Jarvis Telegram Emergency Alerts"
+    icon: mdi:alert-circle
+  jarvis_telegram_natural_language:
+    name: "Jarvis Telegram Natural Language"
+    icon: mdi:chat
+
+template:
+  - sensor:
+      - name: "jarvis_telegram_status"
+        state: >-
+          {% set bot_entities = states | selectattr('entity_id', 'search', 'telegram_bot') | list %}
+          {% if bot_entities | length > 0 %}
+            {% if bot_entities[0].state in ['idle', 'polling'] %}
+              online
+            {% else %}
+              offline
+            {% endif %}
+          {% else %}
+            not_configured
+          {% endif %}
+        attributes:
+          daily_summary: "{{ states('input_boolean.jarvis_telegram_daily_summary') }}"
+          emergency_alerts: "{{ states('input_boolean.jarvis_telegram_emergency_alerts') }}"
+          natural_language: "{{ states('input_boolean.jarvis_telegram_natural_language') }}"
+          last_command_time: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+          bot_entities: "{{ states | selectattr('entity_id', 'match', 'telegram_bot\\..*') | map(attribute='entity_id') | list }}"
+          available_commands: >-
+            [
+              "/briefing", "/status", "/health", "/lights", 
+              "/night", "/morning", "/backup", "/emergency", "/help"
+            ]
+
+automation:
+  - id: jarvis_telegram_command_handler
+    alias: "Jarvis Telegram Command Handler"
+    mode: parallel
+    max: 10
+    trigger:
+      - platform: event
+        event_type: telegram_callback
+      - platform: event
+        event_type: telegram_command
+    condition:
+      - condition: template
+        value_template: >-
+          {{ trigger.event.data.command in [
+            '/briefing', '/status', '/chat', '/lights', '/night', '/morning',
+            '/backup', '/health', '/help', '/emergency', '/recovery'
+          ] }}
+    action:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.event.data.command == '/briefing' }}"
+            sequence:
+              - service: script.jarvis_deep_system_analysis
+                data: {}
+              - service: telegram_bot.send_message
+                data:
+                  chat_id: "{{ trigger.event.data.chat_id if trigger.event.data.chat_id is defined else states('input_text.telegram_chat_id') }}"
+                  message: "🤖 Jarvis system analysis initiated. Check notifications for results."
+
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.event.data.command == '/status' }}"
+            sequence:
+              - service: script.jarvis_system_status_check
+                data: {}
+              - delay:
+                  seconds: 5
+              - service: telegram_bot.send_message
+                data:
+                  chat_id: "{{ trigger.event.data.chat_id if trigger.event.data.chat_id is defined else states('input_text.telegram_chat_id') }}"
+                  message: >-
+                    📊 JARVIS STATUS REPORT
+
+                    🏠 Entities: {{ state_attr('sensor.jarvis_system_info', 'total_entities') | default(0) }}
+                    ⚠️ Issues: {{ state_attr('sensor.jarvis_system_info', 'unavailable_entities') | default(0) }}
+                    🔋 Low batteries: {{ state_attr('sensor.jarvis_system_info', 'low_batteries') | default(0) }}
+                    🤖 Active automations: {{ state_attr('sensor.jarvis_automation_status', 'active_automations') | default([]) | length }}
+                    💡 Lights on: {{ states.light | selectattr('state', '==', 'on') | list | length }}
+                    📊 Health: {{ state_attr('sensor.jarvis_watchdog_status', 'health_score') | default(0) }}%
+
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.event.data.command == '/health' }}"
+            sequence:
+              - service: telegram_bot.send_message
+                data:
+                  chat_id: "{{ trigger.event.data.chat_id if trigger.event.data.chat_id is defined else states('input_text.telegram_chat_id') }}"
+                  message: >-
+                    🏥 JARVIS HEALTH CHECK
+
+                    System Status: {{ states('sensor.jarvis_watchdog_status') | default('Unknown') | title }}
+                    Health Score: {{ state_attr('sensor.jarvis_watchdog_status', 'health_score') | default(0) }}%
+                    Last Backup: {{ states('input_datetime.last_backup_time') | default('Never') }}
+
+                    Issues: {{ state_attr('sensor.jarvis_watchdog_status', 'issues_detected') | default([]) | join(', ') if state_attr('sensor.jarvis_watchdog_status', 'issues_detected') else 'None detected' }}
+
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.event.data.command == '/lights' }}"
+            sequence:
+              - service: script.jarvis_turn_off_all_lights
+                data: {}
+              - service: telegram_bot.send_message
+                data:
+                  chat_id: "{{ trigger.event.data.chat_id if trigger.event.data.chat_id is defined else states('input_text.telegram_chat_id') }}"
+                  message: "💡 All lights turned off by Jarvis command."
+
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.event.data.command == '/night' }}"
+            sequence:
+              - service: script.jarvis_night_mode
+                data: {}
+              - service: telegram_bot.send_message
+                data:
+                  chat_id: "{{ trigger.event.data.chat_id if trigger.event.data.chat_id is defined else states('input_text.telegram_chat_id') }}"
+                  message: "🌙 Night mode activated. Sweet dreams, sir."
+
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.event.data.command == '/morning' }}"
+            sequence:
+              - service: script.jarvis_morning_routine
+                data: {}
+              - service: telegram_bot.send_message
+                data:
+                  chat_id: "{{ trigger.event.data.chat_id if trigger.event.data.chat_id is defined else states('input_text.telegram_chat_id') }}"
+                  message: "🌅 Good morning routine activated. Ready for the day."
+
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.event.data.command == '/backup' }}"
+            sequence:
+              - service: shell_command.jarvis_backup_config
+                data: {}
+              - service: shell_command.jarvis_backup_scripts
+                data: {}
+              - service: shell_command.jarvis_backup_automations
+                data: {}
+              - service: telegram_bot.send_message
+                data:
+                  chat_id: "{{ trigger.event.data.chat_id if trigger.event.data.chat_id is defined else states('input_text.telegram_chat_id') }}"
+                  message: "📦 Emergency backup initiated by Telegram command."
+
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.event.data.command == '/emergency' }}"
+            sequence:
+              - service: script.jarvis_panic_protocol
+                data: {}
+              - service: telegram_bot.send_message
+                data:
+                  chat_id: "{{ trigger.event.data.chat_id if trigger.event.data.chat_id is defined else states('input_text.telegram_chat_id') }}"
+                  message: "🚨 EMERGENCY PROTOCOL ACTIVATED via Telegram"
+
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.event.data.command == '/chat' }}"
+            sequence:
+              - service: telegram_bot.send_message
+                data:
+                  chat_id: "{{ trigger.event.data.chat_id if trigger.event.data.chat_id is defined else states('input_text.telegram_chat_id') }}"
+                  message: >-
+                    💬 JARVIS CHAT MODE
+
+                    Chat interface available in Home Assistant.
+                    Current status: {{ states('sensor.jarvis_chat_status') | default('Unknown') | title }}
+
+                    Available commands:
+                    /briefing - System analysis
+                    /status - Quick status
+                    /health - Health check
+                    /lights - Turn off lights
+                    /night - Night mode
+                    /morning - Morning routine
+                    /backup - Emergency backup
+                    /emergency - Panic protocol
+                    /help - This message
+
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.event.data.command == '/help' }}"
+            sequence:
+              - service: telegram_bot.send_message
+                data:
+                  chat_id: "{{ trigger.event.data.chat_id if trigger.event.data.chat_id is defined else states('input_text.telegram_chat_id') }}"
+                  message: >-
+                    🤖 JARVIS TELEGRAM COMMANDS
+
+                    SYSTEM:
+                    /briefing - Full system analysis
+                    /status - Quick status report
+                    /health - Health & diagnostics
+
+                    CONTROL:
+                    /lights - Turn off all lights
+                    /night - Activate night mode
+                    /morning - Morning routine
+
+                    MAINTENANCE:
+                    /backup - Create emergency backup
+                    /emergency - Activate panic protocol
+                    /recovery - Recovery options
+
+                    OTHER:
+                    /chat - Chat interface info
+                    /help - This help message
+
+                    Type any command to execute.
+
+  - id: jarvis_telegram_natural_language
+    alias: "Jarvis Telegram Natural Language"
+    trigger:
+      - platform: event
+        event_type: telegram_text
+    condition:
+      - condition: template
+        value_template: >-
+          {{ 'jarvis' in trigger.event.data.text | lower }}
+    action:
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.jarvis_chat_response
+        data:
+          value: >-
+            JARVIS TELEGRAM NATURAL LANGUAGE INTERFACE
+
+            User message via Telegram: "{{ trigger.event.data.text }}"
+
+            CURRENT SYSTEM STATUS:
+            - Time: {{ now().strftime('%H:%M on %A') }}
+            - System health: {{ state_attr('sensor.jarvis_watchdog_status', 'health_score') | default(0) }}%
+            - Active issues: {{ state_attr('sensor.jarvis_system_info', 'unavailable_entities') | default(0) }}
+            - Lights on: {{ states.light | selectattr('state', '==', 'on') | list | length }}
+            - Battery alerts: {{ state_attr('sensor.jarvis_system_info', 'low_batteries') | default(0) }}
+
+            Respond as Jarvis via Telegram - confident, helpful, concise.
+            If action is needed, explain what I can do and offer to execute.
+            Keep response under 200 characters for Telegram readability.
+      - delay:
+          seconds: 6
+      - service: telegram_bot.send_message
+        data:
+          chat_id: "{{ trigger.event.data.chat_id if trigger.event.data.chat_id is defined else states('input_text.telegram_chat_id') }}"
+          message: "🤖 {{ states('input_text.jarvis_chat_response')[:200] }}"
+
+  - id: jarvis_telegram_emergency_alerts
+    alias: "Jarvis Telegram Emergency Alerts"
+    trigger:
+      - platform: state
+        entity_id: sensor.jarvis_watchdog_status
+        to: "critical"
+      - platform: numeric_state
+        entity_id: sensor.jarvis_system_info
+        attribute: critical_batteries
+        above: 3
+      - platform: state
+        entity_id: binary_sensor.jarvis_system_healthy
+        to: "off"
+    condition:
+      - condition: state
+        entity_id: input_boolean.jarvis_telegram_emergency_alerts
+        state: "on"
+    action:
+      - service: telegram_bot.send_message
+        data:
+          chat_id: "{{ states('input_text.telegram_chat_id') }}"
+          message: >-
+            🚨 JARVIS EMERGENCY ALERT
+
+            Trigger: {{ trigger.entity_id }}
+            Status: {{ trigger.to_state.state }}
+            Time: {{ now().strftime('%H:%M:%S') }}
+
+            System Health: {{ state_attr('sensor.jarvis_watchdog_status', 'health_score') | default(0) }}%
+            Critical Issues: {{ state_attr('sensor.jarvis_watchdog_status', 'issues_detected') | default([]) | join(', ') }}
+
+            Use /status for details or /help for commands.
+
+  - id: jarvis_telegram_daily_summary
+    alias: "Jarvis Telegram Daily Summary"
+    trigger:
+      - platform: time
+        at: "20:00:00"
+    condition:
+      - condition: state
+        entity_id: input_boolean.jarvis_telegram_daily_summary
+        state: "on"
+    action:
+      - service: input_text.set_value
+        target:
+          entity_id: input_text.jarvis_chat_response
+        data:
+          value: >-
+            JARVIS DAILY SUMMARY FOR TELEGRAM
+
+            End of day system summary:
+            - System health: {{ state_attr('sensor.jarvis_watchdog_status', 'health_score') | default(0) }}%
+            - Issues resolved today: {{ state_attr('sensor.jarvis_system_info', 'unavailable_entities') | default(0) }}
+            - Battery maintenance: {{ state_attr('sensor.jarvis_system_info', 'low_batteries') | default(0) }} devices need attention
+            - Automation performance: {{ state_attr('sensor.jarvis_automation_status', 'active_automations') | default([]) | length }} active
+
+            Create a brief daily summary highlighting:
+            1. Overall system performance today
+            2. Any issues that need attention
+            3. Positive achievements or improvements
+            4. Tomorrow's priorities
+
+            Keep it concise, positive, and actionable for Telegram.
+            Maximum 300 characters.
+      - delay:
+          seconds: 8
+      - service: telegram_bot.send_message
+        data:
+          chat_id: "{{ states('input_text.telegram_chat_id') }}"
+          message: >-
+            🌅 JARVIS DAILY SUMMARY
+
+            {{ states('input_text.jarvis_chat_response') }}
+
+  - id: jarvis_telegram_debug
+    alias: "Jarvis Telegram Debug"
+    mode: queued
+    trigger:
+      - platform: event
+        event_type: telegram_command
+      - platform: event
+        event_type: telegram_text
+      - platform: event
+        event_type: telegram_callback
+    action:
+      - service: notify.notify
+        data:
+          title: "🐛 Telegram Event Debug"
+          message: "Event: {{ trigger.event.event_type }} | Chat: {{ trigger.event.data.chat_id | default('unknown') }} | Data: {{ trigger.event.data }}"
