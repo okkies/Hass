@@ -1,0 +1,1514 @@
+- id: '1623586488810'
+  alias: Todoist notification
+  description: ''
+  trigger:
+  - type: value
+    platform: device
+    device_id: 6c0058399fe9db7bf3ad8f7dea981bf9
+    entity_id: sensor.sjaakies_poepdoos_waste_drawer
+    domain: sensor
+    above: 22
+  condition: []
+  action:
+  - event: TOdoist.new_task
+    event_data:
+      content: Sjaakiepoopdoos
+      project: Sjaakie
+      labels: Homework,School
+      priority: 3
+      due_date_string: tomorrow at 14:00
+      due_date_lang: en
+  mode: single
+- id: '1623589855922'
+  alias: Sjaakie's poepdoos sensor > Todoist
+  description: ''
+  trigger:
+  - type: value
+    platform: device
+    device_id: 6c0058399fe9db7bf3ad8f7dea981bf9
+    entity_id: sensor.sjaakies_poepdoos_waste_drawer
+    domain: sensor
+    above: 75
+    below: 100
+  condition: []
+  action:
+  - service: todoist.new_task
+    data:
+      content: Sjaakie's poepdoos leegmaken
+      priority: 1
+      due_date_string: Today 18:00
+      due_date_lang: en
+  mode: single
+- id: '1597401858182'
+  alias: SABnzbd Download Handling
+  description: Pause SABnzbd downloads whilst someone is watching Plex, resume downloads
+    when no one is watching!
+  trigger:
+  - platform: template
+    value_template: '{{ states(''sensor.plex_unraidv2'') | int > 0 }}'
+  - entity_id: sensor.sabnzbd_status
+    platform: state
+    to: Downloading
+  - entity_id: sensor.plex_unraidv2
+    platform: state
+    to: '0'
+  condition: []
+  action:
+  - choose:
+    - conditions:
+      - condition: and
+        conditions:
+        - condition: template
+          value_template: '{{ states(''sensor.plex_unraidv2'') | int > 0 }}'
+        - condition: state
+          entity_id: sensor.sabnzbd_status
+          state: Downloading
+      sequence:
+      - data: {}
+        service: sabnzbd.pause
+    - conditions:
+      - condition: state
+        entity_id: sensor.plex_unraidv2
+        state: '0'
+      sequence:
+      - data: {}
+        service: sabnzbd.resume
+    default: []
+  mode: single
+- id: '1634857970167'
+  alias: Wake-up light sunrise effect
+  description: ''
+  use_blueprint:
+    path: Sbyx/wake-up-light-alarm-with-sunrise-effect.yaml
+    input:
+      manual_time: 07:00:00
+      light_entity: light.office_bed_color
+      timestamp_sensor: sensor.sm_s928b_next_alarm
+      post_sunrise_actions:
+      - device_id: 740add61c2a56547623d464ba0009c0b
+        domain: cover
+        entity_id: cover.gordijn_navin
+        type: set_position
+        position: 100
+      - type: turn_on
+        device_id: 05f6bd4bd71d8db9767ea626e1c9169c
+        entity_id: light.office_raam_color
+        domain: light
+      pre_sunrise_actions: []
+      sunrise_duration: 25
+      end_brightness: 249
+- id: '1635626074676'
+  alias: 'Overloop: motion-activated light with sunlight conditions'
+  description: ''
+  use_blueprint:
+    path: Marcos_Felipe/turn-light-on-and-off-based-on-detected-motion-with-sun-condition.yaml
+    input:
+      light_target:
+        area_id:
+        - overloop
+      no_motion_wait: 60
+      motion_entity: binary_sensor.motion_sensor_ikea_3_occupancy
+- id: '1635705554902'
+  alias: Gordijnen dicht zon onder
+  description: Sluit gordijnen deels als raam open staat, volledig als dicht
+  triggers:
+  - event: sunset
+    offset: 0:25
+    trigger: sun
+  conditions: []
+  actions:
+  - choose:
+    - conditions:
+      - condition: state
+        entity_id: binary_sensor.doorsensor_bedroom_navin_down_contact
+        state: open
+      sequence:
+      - data:
+          entity_id: cover.gordijn_navin
+          position: 25
+        action: cover.set_cover_position
+    - conditions:
+      - condition: state
+        entity_id: binary_sensor.doorsensor_bedroom_navin_down_contact
+        state: closed
+      sequence:
+      - data:
+          entity_id: cover.gordijn_navin
+          position: 0
+        action: cover.set_cover_position
+  - data:
+      entity_id:
+      - cover.gordijn_office_hoog
+      - cover.gordijn_office_laag
+      - cover.gordijn_woonkamer_klein_links
+      - cover.gordijn_woonkamer_klein_rechts
+      - cover.gordijn_woonkamer_groot
+      position: 0
+    action: cover.set_cover_position
+  mode: single
+- id: '1661133501500'
+  alias: Turn off garage licht
+  description: ''
+  trigger:
+  - platform: device
+    type: turned_on
+    device_id: c0cac2d764afd7e80cc61a46c237cde5
+    entity_id: switch.3x_button_garage_right
+    domain: switch
+    for:
+      hours: 0
+      minutes: 15
+      seconds: 0
+  condition: []
+  action:
+  - type: turn_off
+    device_id: c0cac2d764afd7e80cc61a46c237cde5
+    entity_id: switch.3x_button_garage_right
+    domain: switch
+  mode: single
+- id: '1663603502126'
+  alias: Humidity Management navin badkamer
+  description: ''
+  use_blueprint:
+    path: dondochaka/turn-a-fan-on-and-off-based-on-the-difference-between-a-humidity-sensor-and-a-baseline.yaml
+    input:
+      fan_switch: light.lumi_lumi_switch_l2aeu1_light_4
+      reference_humidity_sensor: sensor.tempmeter_woonkamer_humidity
+      humidity_sensor: sensor.ewelink_th01_humidity
+      rising_threshold: 29
+      falling_threshold: 25
+- id: '1664178321841'
+  alias: Humidity Management Femy badkamer
+  description: ''
+  use_blueprint:
+    path: dondochaka/turn-a-fan-on-and-off-based-on-the-difference-between-a-humidity-sensor-and-a-baseline.yaml
+    input:
+      fan_switch: light.tyzb01_qeqvmvti_ts0011_on_off
+      reference_humidity_sensor: sensor.tempmeter_woonkamer_humidity
+      humidity_sensor: sensor.tempmeter_badkamer_f_humidity
+      rising_threshold: 29
+      falling_threshold: 25
+- id: '1665063582058'
+  alias: Toilet beneden turn off
+  description: ''
+  triggers:
+  - type: turned_on
+    device_id: e8060381f4f2b9ef6d0dbf4575fda9a7
+    entity_id: 7318e50747e539a823f229b2d6432492
+    domain: switch
+    trigger: device
+    for:
+      hours: 0
+      minutes: 18
+      seconds: 0
+  conditions: []
+  actions:
+  - type: turn_off
+    device_id: e8060381f4f2b9ef6d0dbf4575fda9a7
+    entity_id: 7318e50747e539a823f229b2d6432492
+    domain: switch
+  mode: single
+- id: '1672360724843'
+  alias: garage motion sensor
+  description: ''
+  use_blueprint:
+    path: homeassistant/motion_light.yaml
+    input:
+      motion_entity: binary_sensor.motion_sensor_garage_occupancy
+      light_target:
+        entity_id:
+        - light.3x_button_garage_right
+      no_motion_wait: 180
+- id: '1672361164723'
+  alias: motion sensor hal
+  description: ''
+  use_blueprint:
+    path: Marcos_Felipe/turn-light-on-and-off-based-on-detected-motion-with-sun-condition.yaml
+    input:
+      motion_entity: binary_sensor.motion_sensor_ikea_1_occupancy
+      light_target:
+        device_id: 687226d639974ed864c5873a0ec64291
+      sunset_offset: 45
+      sunrise_offset: 26
+      no_motion_wait: 60
+- id: '1676590906842'
+  alias: Automated Daily Snapshot updated 2
+  description: ''
+  use_blueprint:
+    path: rcursaru/updated-automated-backups.yaml
+    input:
+      trigger_time: 05:44:22
+- id: '1676752479896'
+  alias: Gordijnen open zon op
+  description: ''
+  trigger:
+  - platform: sun
+    event: sunrise
+    offset: 0:10
+  condition: []
+  action:
+  - device_id: 4cb494d53952b574f78164053fab3da4
+    domain: cover
+    entity_id: cover.gordijn_office_hoog
+    type: set_position
+    position: 100
+  - device_id: de2320283fa74143c5ef8185f4941cc3
+    domain: cover
+    entity_id: cover.gordijn_office_laag
+    type: set_position
+    position: 100
+  - device_id: a76556277c557237e7306b72fe8f38eb
+    domain: cover
+    entity_id: cover.gordijn_woonkamer_klein_links
+    type: set_position
+    position: 100
+  - device_id: 8d182703f0ae8d2a3a7ec8bda65f3b70
+    domain: cover
+    entity_id: cover.gordijn_woonkamer_klein_rechts
+    type: set_position
+    position: 100
+  - device_id: c02cf8200516c6501a0a9fe971f8460b
+    domain: cover
+    entity_id: cover.gordijn_woonkamer_groot_rechts
+    type: set_position
+    position: 100
+  - device_id: 74086adaf776247a8ecf69d19aeb59a5
+    domain: cover
+    entity_id: cover.gordijn_woonkamer_groot_links
+    type: set_position
+    position: 100
+  mode: single
+- id: '1676753167298'
+  alias: Motion sensor garage 2
+  description: ''
+  use_blueprint:
+    path: homeassistant/motion_light.yaml
+    input:
+      motion_entity: binary_sensor.motion_sensor_3_occupancy
+      no_motion_wait: 180
+      light_target:
+        entity_id: light.3x_button_garage_right
+- id: '1676755429148'
+  alias: bathrooms humidity
+  description: ''
+  use_blueprint:
+    path: edit/Humidity2.yaml
+    input:
+      humidity_sensor_bathroom1: sensor.tempsensor_navin_humidity
+      humidity_sensor_bathroom2: sensor.tempsensor_femy_humidity
+      reference_humidity_sensor: sensor.tempsensor_scherm_2_humidity
+      fan_switch: switch.2x_button_keuken_links_right
+      rising_threshold: 7
+      falling_threshold: 4
+- id: '1677182288844'
+  description: ''
+  use_blueprint:
+    path: Blackshome/bathroom-humidity-exhaust-fan.yaml
+    input:
+      trigger: sensor.tempsensor_navin_humidity
+      falling_humidity: -2
+      fan_speed_off: []
+      fan_switch:
+        entity_id: switch.2x_button_keuken_links_right
+      bathroom_humidity_sensor: sensor.tempsensor_navin_humidity
+- id: '1677185971877'
+  alias: Ikea strybar button
+  description: ''
+  use_blueprint:
+    path: EPMatt/ikea_e2001_e2002.yaml
+    input:
+      integration: Zigbee2MQTT
+      action_button_left_short:
+      - device_id: 3ad93e61bc471f2b782a7ca7a090ed15
+        domain: light
+        entity_id: light.hue_filament_bulb_3
+        type: brightness_decrease
+      - device_id: ecd0f2ac520e0a2c1ab6b6ee21cea58b
+        domain: light
+        entity_id: light.hue_filament_bulb_2
+        type: brightness_decrease
+      action_button_left_long:
+      - type: toggle
+        device_id: 9e02473b897cad01c1f29d73db0b87b5
+        entity_id: 0568829829ae819a09091ca84b951688
+        domain: light
+      action_button_right_short: []
+      action_button_up_short:
+      - if:
+        - condition: device
+          type: is_off
+          device_id: ecd0f2ac520e0a2c1ab6b6ee21cea58b
+          entity_id: light.hue_filament_bulb_2
+          domain: light
+        then:
+        - type: turn_on
+          device_id: ecd0f2ac520e0a2c1ab6b6ee21cea58b
+          entity_id: light.hue_filament_bulb_2
+          domain: light
+          brightness_pct: 1
+        else:
+        - device_id: ecd0f2ac520e0a2c1ab6b6ee21cea58b
+          domain: light
+          entity_id: light.hue_filament_bulb_2
+          type: brightness_increase
+      - if:
+        - condition: device
+          type: is_off
+          device_id: 3ad93e61bc471f2b782a7ca7a090ed15
+          entity_id: light.hue_filament_bulb_3
+          domain: light
+        then:
+        - type: turn_on
+          device_id: 3ad93e61bc471f2b782a7ca7a090ed15
+          entity_id: light.hue_filament_bulb_3
+          domain: light
+          brightness_pct: 1
+        else:
+        - device_id: 3ad93e61bc471f2b782a7ca7a090ed15
+          domain: light
+          entity_id: light.hue_filament_bulb_3
+          type: brightness_increase
+      action_button_down_long:
+      - type: turn_off
+        device_id: ecd0f2ac520e0a2c1ab6b6ee21cea58b
+        entity_id: light.hue_filament_bulb_2
+        domain: light
+      - type: turn_off
+        device_id: 3ad93e61bc471f2b782a7ca7a090ed15
+        entity_id: light.hue_filament_bulb_3
+        domain: light
+      action_button_down_short:
+      - device_id: ecd0f2ac520e0a2c1ab6b6ee21cea58b
+        domain: light
+        entity_id: light.hue_filament_bulb_2
+        type: brightness_decrease
+      - device_id: 3ad93e61bc471f2b782a7ca7a090ed15
+        domain: light
+        entity_id: light.hue_filament_bulb_3
+        type: brightness_decrease
+      controller_entity: sensor.ikea_strybar_action
+- id: '1677362350270'
+  alias: PIR office
+  description: ''
+  trigger:
+  - type: motion
+    platform: device
+    device_id: b983c0216e3e818d29f46a2e7bd9afcb
+    entity_id: binary_sensor.office_pir
+    domain: binary_sensor
+  condition:
+  - condition: and
+    conditions:
+    - condition: sun
+      after: sunset
+      before: sunrise
+  - condition: or
+    conditions:
+    - condition: device
+      device_id: 4cb494d53952b574f78164053fab3da4
+      domain: cover
+      entity_id: cover.gordijn_office_hoog
+      type: is_closed
+    - condition: and
+      conditions:
+      - condition: device
+        device_id: de2320283fa74143c5ef8185f4941cc3
+        domain: cover
+        entity_id: cover.gordijn_office_laag
+        type: is_closed
+  - condition: and
+    conditions:
+    - type: is_not_occupied
+      condition: device
+      device_id: b983c0216e3e818d29f46a2e7bd9afcb
+      entity_id: binary_sensor.office_mmwave
+      domain: binary_sensor
+      for:
+        hours: 0
+        minutes: 1
+        seconds: 0
+  action:
+  - service: scene.turn_on
+    target:
+      entity_id: scene.office_savanne_zonsondergang
+    metadata: {}
+  mode: single
+- id: '1677524753871'
+  alias: climate when away
+  description: ''
+  trigger:
+  - platform: numeric_state
+    entity_id: zone.home
+    id: Leavin-home
+    above: 4
+  - platform: numeric_state
+    entity_id: zone.home
+    id: returning -home
+    below: 4
+  condition: []
+  action:
+  - choose:
+    - conditions:
+      - condition: trigger
+        id: Leavin-home
+      sequence:
+      - service: climate.set_temperature
+        data:
+          temperature: 13
+      - service: climate.set_preset_mode
+        data:
+          preset_mode: Away
+        target:
+          entity_id: climate.toon_thermostat
+    - conditions:
+      - condition: trigger
+        id: returning -home
+      sequence:
+      - service: climate.set_preset_mode
+        data:
+          preset_mode: Home
+        target:
+          entity_id: climate.toon_thermostat
+  mode: single
+- id: '1691259590716'
+  alias: Watersensor
+  description: ''
+  trigger:
+  - type: moist
+    platform: device
+    device_id: fd5bf279a53840b431067a9bd58bea4e
+    entity_id: 5b0ea22343f694189e071fef5e518df2
+    domain: binary_sensor
+  condition: []
+  action:
+  - service: notify.mobile_app_sm_s901b
+    data:
+      message: Water bij balkondeur beneden
+      title: Deur dicht doen
+  mode: single
+- id: '1693739784140'
+  alias: sync light and balcony thingy v2
+  description: ''
+  use_blueprint:
+    path: aderusha/link_multiple_devices.yaml
+    input:
+      linked_entities:
+      - light.hue_filament_bulb_5
+      - switch.3x_button_balkon_center
+      - light.hue_filament_bulb_4
+- id: '1693739894327'
+  alias: sync vide licht knop v2
+  description: ''
+  use_blueprint:
+    path: aderusha/link_multiple_devices.yaml
+    input:
+      linked_entities:
+      - switch.powersocket_ikea_1
+      - light.3x_button_vide_right
+      - switch.lichtknop_trap_boven_left
+- id: '1693740840195'
+  alias: sync fan&badkamerN&Vide2 v2
+  description: ''
+  use_blueprint:
+    path: aderusha/link_multiple_devices.yaml
+    input:
+      linked_entities:
+      - switch.3x_button_badkamer_navin_center
+      - switch.2x_button_keuken_links_right
+      - switch.3x_button_vide_center
+- id: '1693741016388'
+  alias: sync femy werkplek v2
+  description: ''
+  use_blueprint:
+    path: aderusha/link_multiple_devices.yaml
+    input:
+      linked_entities:
+      - switch.3x_button_office_right
+      - switch.powersocket_werkplek_femy_2
+      - sensor.smart_button_1_action
+- id: '1693741476314'
+  alias: sync navin werkplek v2
+  description: ''
+  use_blueprint:
+    path: aderusha/link_multiple_devices.yaml
+    input:
+      linked_entities:
+      - switch.3x_button_office_left
+      - switch.powerplug_navin_werkplek2
+      - sensor.office_on_off_button_action
+- id: '1701017170536'
+  alias: sync trap lichtknop
+  description: ''
+  use_blueprint:
+    path: aderusha/link_multiple_devices.yaml
+    input:
+      linked_entities:
+      - switch.lichtknop_trap_boven_right
+      - sensor.lichtknop_trap_beneden_action
+- id: '1701017642023'
+  alias: Trapknop knop?
+  description: ''
+  use_blueprint:
+    path: Stringer/zigbee2mqtt-loratap-ss600zb-tuya-ts0043-3-button-wireless-switch.yaml
+    input:
+      switch: sensor.lichtknop_trap_beneden_action
+      button_three_short_press:
+      - type: toggle
+        device_id: 82f7403f9daba915a54b46f0afb31573
+        entity_id: 5d9f8aca4be757d8be9b4f1d72d76647
+        domain: switch
+      button_two_long_press:
+      - type: toggle
+        device_id: 82f7403f9daba915a54b46f0afb31573
+        entity_id: 5d9f8aca4be757d8be9b4f1d72d76647
+        domain: switch
+      button_two_double_press:
+      - type: toggle
+        device_id: 82f7403f9daba915a54b46f0afb31573
+        entity_id: 5d9f8aca4be757d8be9b4f1d72d76647
+        domain: switch
+      button_two_short_press:
+      - type: toggle
+        device_id: 82f7403f9daba915a54b46f0afb31573
+        entity_id: 5d9f8aca4be757d8be9b4f1d72d76647
+        domain: switch
+      button_one_long_press:
+      - type: toggle
+        device_id: 82f7403f9daba915a54b46f0afb31573
+        entity_id: 5d9f8aca4be757d8be9b4f1d72d76647
+        domain: switch
+      button_one_double_press:
+      - type: toggle
+        device_id: 82f7403f9daba915a54b46f0afb31573
+        entity_id: 5d9f8aca4be757d8be9b4f1d72d76647
+        domain: switch
+      button_one_short_press:
+      - type: toggle
+        device_id: 82f7403f9daba915a54b46f0afb31573
+        entity_id: 5d9f8aca4be757d8be9b4f1d72d76647
+        domain: switch
+      button_three_long_press:
+      - type: toggle
+        device_id: 82f7403f9daba915a54b46f0afb31573
+        entity_id: 5d9f8aca4be757d8be9b4f1d72d76647
+        domain: switch
+      button_three_double_press:
+      - type: toggle
+        device_id: 82f7403f9daba915a54b46f0afb31573
+        entity_id: 5d9f8aca4be757d8be9b4f1d72d76647
+        domain: switch
+- id: '1701021345069'
+  alias: sync office lights
+  description: ''
+  use_blueprint:
+    path: aderusha/link_multiple_devices.yaml
+    input:
+      linked_entities:
+      - light.extended_color_light_4_7
+      - light.extended_color_light_5_4
+      - light.extended_color_light_6_2
+      - light.extended_color_light_4_8
+      - light.extended_color_light_4_9
+      - light.rechts_tv
+      - light.hue_color_lamp_1
+- id: '1701026175919'
+  alias: 6x switch n1
+  description: ''
+  use_blueprint:
+    path: Drafted/aqara-buttons-all-in-one-zigbee2mqtt.yaml
+    input:
+      action_sensor: sensor.6x_button_nr1_action
+      single_action:
+      - type: turn_on
+        device_id: 6229e36f572c316b93e73ae5a8070cff
+        entity_id: 288cbc8573acfb8a83af953adf2c8400
+        domain: light
+        brightness_pct: 30
+      - type: turn_on
+        device_id: 05f6bd4bd71d8db9767ea626e1c9169c
+        entity_id: 9e384dbe1a95c8496c30420f8399eb72
+        domain: light
+        brightness_pct: 30
+      - type: turn_on
+        device_id: 89814e55154c64ef54357ee21306a95b
+        entity_id: 658bb6109d34eb343d42d5313f8e3c81
+        domain: light
+        brightness_pct: 30
+      - type: turn_off
+        device_id: 7a0e3ae934833569594eb46c421627b7
+        entity_id: e7ad844724f7340f3db48800a950055d
+        domain: light
+      double_action: []
+      triple_action: []
+- id: '1701026675027'
+  alias: 6x nr 1
+  description: ''
+  use_blueprint:
+    path: shaxs/zigbee2mqtt-z2m-aqara-opple-6-button-remote-3-bands-wxcjkg13lm.yaml
+    input:
+      switch: sensor.6x_button_nr1_action
+      button_1_single:
+      - type: toggle
+        device_id: 7a0e3ae934833569594eb46c421627b7
+        entity_id: e7ad844724f7340f3db48800a950055d
+        domain: light
+- id: '1701045856722'
+  alias: Sync vide licht
+  description: ''
+  use_blueprint:
+    path: aderusha/link_multiple_devices.yaml
+    input:
+      linked_entities:
+      - switch.3x_button_vide_left
+      - switch.lichtknop_trap_boven_center
+- id: '1701541253127'
+  alias: Strybar livingroom
+  description: ''
+  use_blueprint:
+    path: KeviinCosmos/ikea-styrbar-e2001-2002-ultimate-zigbee2mqtt-z2m.yaml
+    input:
+      controller_entity: sensor.ikea_strybar_action
+      light_large_push:
+      - device_id: a72ab2fc3438def5c10a658a32912a8b
+        domain: light
+        entity_id: 53589c56562dcf707f7598d36075519e
+        type: brightness_increase
+      - device_id: 4fd0029b596cec7463486e4b6c9215bd
+        domain: light
+        entity_id: 21f0714f8e9c20d8dd6925d86db239a4
+        type: brightness_increase
+      light_large_hold:
+      - type: turn_on
+        device_id: a72ab2fc3438def5c10a658a32912a8b
+        entity_id: 53589c56562dcf707f7598d36075519e
+        domain: light
+        brightness_pct: 100
+      - type: turn_on
+        device_id: 4fd0029b596cec7463486e4b6c9215bd
+        entity_id: 21f0714f8e9c20d8dd6925d86db239a4
+        domain: light
+        brightness_pct: 100
+      light_small_push:
+      - device_id: 7a0e3ae934833569594eb46c421627b7
+        domain: light
+        entity_id: e7ad844724f7340f3db48800a950055d
+        type: brightness_decrease
+      - device_id: c5e9a04bc3cc5c4b5f95ed154a9a5358
+        domain: light
+        entity_id: 2a4d10749f6102f43a3c883ea5d3699b
+        type: brightness_decrease
+      light_small_hold:
+      - type: turn_off
+        device_id: 7a0e3ae934833569594eb46c421627b7
+        entity_id: e7ad844724f7340f3db48800a950055d
+        domain: light
+      - type: turn_off
+        device_id: c5e9a04bc3cc5c4b5f95ed154a9a5358
+        entity_id: 2a4d10749f6102f43a3c883ea5d3699b
+        domain: light
+      arrow_left_push:
+      - device_id: ecd0f2ac520e0a2c1ab6b6ee21cea58b
+        domain: light
+        entity_id: 5e6c196354ef00ebb5f023f144f91361
+        type: brightness_decrease
+      - device_id: 3ad93e61bc471f2b782a7ca7a090ed15
+        domain: light
+        entity_id: 0d46f8c0e32cbdc2e0491b5a71ff2e1e
+        type: brightness_decrease
+      arrow_left_hold:
+      - type: turn_off
+        device_id: ecd0f2ac520e0a2c1ab6b6ee21cea58b
+        entity_id: 5e6c196354ef00ebb5f023f144f91361
+        domain: light
+      - type: turn_off
+        device_id: 3ad93e61bc471f2b782a7ca7a090ed15
+        entity_id: 0d46f8c0e32cbdc2e0491b5a71ff2e1e
+        domain: light
+      arrow_right_push:
+      - device_id: ecd0f2ac520e0a2c1ab6b6ee21cea58b
+        domain: light
+        entity_id: 5e6c196354ef00ebb5f023f144f91361
+        type: brightness_increase
+      - device_id: 3ad93e61bc471f2b782a7ca7a090ed15
+        domain: light
+        entity_id: 0d46f8c0e32cbdc2e0491b5a71ff2e1e
+        type: brightness_increase
+      arrow_right_hold:
+      - type: turn_on
+        device_id: ecd0f2ac520e0a2c1ab6b6ee21cea58b
+        entity_id: 5e6c196354ef00ebb5f023f144f91361
+        domain: light
+        brightness_pct: 100
+      - type: turn_on
+        device_id: 3ad93e61bc471f2b782a7ca7a090ed15
+        entity_id: 0d46f8c0e32cbdc2e0491b5a71ff2e1e
+        domain: light
+        brightness_pct: 100
+- id: '1701876138102'
+  alias: werkplek femy
+  description: ''
+  trigger:
+  - platform: device
+    domain: mqtt
+    device_id: 97fc79c8d21d036425cf6471e92646a6
+    type: action
+    subtype: single
+    discovery_id: 0xa4c138bad50010ef action_single
+  condition: []
+  action:
+  - type: toggle
+    device_id: 364a4b0483b2046268e0156c4b357ffe
+    entity_id: a3f2a6223f7990401eac25103c4112ba
+    domain: switch
+  mode: single
+- id: '1704381281906'
+  alias: play video doorbell
+  description: ''
+  trigger:
+  - type: turned_on
+    platform: device
+    device_id: dc84efd618f6134b6ca83e72e5fb873e
+    entity_id: 1b8b1ced20eaa26a4f7d745810b07ce8
+    domain: binary_sensor
+  condition: []
+  action:
+  - service: camera.play_stream
+    data:
+      media_player: media_player.office_screen
+      format: hls
+    target:
+      entity_id: camera.reolink_video_doorbell_wifi_fluent
+  - service: tts.speak
+    data:
+      cache: true
+      media_player_entity_id: media_player.woonkamer_1
+      message: Ding fucking dong
+      language: english
+  - service: tts.speak
+    data:
+      cache: true
+      message: Ding fucking dong
+      language: english
+      media_player_entity_id: media_player.badkamer_navin
+  mode: single
+- id: '1710294208765'
+  alias: motionsensor toilet
+  description: ''
+  use_blueprint:
+    path: homeassistant/motion_light.yaml
+    input:
+      motion_entity: binary_sensor.motion_sensor_ikea_2_occupancy
+      light_target:
+        entity_id: light.1x_button_toilet
+      no_motion_wait: 666
+- id: '1720999049069'
+  alias: Wake-up light alarm with sunrise effect 2
+  description: ''
+  use_blueprint:
+    path: triplepoint/wake-up-light-alarm-with-sunrise-effect.yaml
+    input:
+      light_entity: light.office_bed_color
+      timestamp_sensor: sensor.sm_s928b_next_alarm
+      post_sunrise_actions:
+      - device_id: 740add61c2a56547623d464ba0009c0b
+        domain: cover
+        entity_id: 479d83293301c13e2c03a1e65bf036d4
+        type: set_position
+        position: 100
+      - type: turn_on
+        device_id: 05f6bd4bd71d8db9767ea626e1c9169c
+        entity_id: 9e384dbe1a95c8496c30420f8399eb72
+        domain: light
+- id: '1733080088532'
+  alias: Femy werkplek button
+  description: ''
+  use_blueprint:
+    path: amorfinvdev/somrig.yaml
+    input:
+      remote_name: office on off button
+      dots_1_press_action:
+      - type: turn_on
+        device_id: 01d463f50c9281203b123c6a376cfd1f
+        entity_id: 03fbefd71f53f65ae929ef3817fd07ce
+        domain: switch
+      dots_2_press_action:
+      - type: turn_off
+        device_id: 01d463f50c9281203b123c6a376cfd1f
+        entity_id: 03fbefd71f53f65ae929ef3817fd07ce
+        domain: switch
+- id: '1751630873986'
+  alias: Gordijnen dicht zon onder - Improved
+  description: Sluit alle gordijnen bij zonsondergang met retries en afbreken bij
+    juiste positie
+  triggers:
+  - event: sunset
+    offset: 0:25
+    trigger: sun
+  conditions: []
+  actions:
+  - choose:
+    - conditions:
+      - condition: state
+        entity_id: binary_sensor.doorsensor_bedroom_navin_down_contact
+        state: 'on'
+      sequence:
+      - repeat:
+          count: 3
+          sequence:
+          - data:
+              entity_id: cover.gordijn_navin
+              position: 25
+            action: cover.set_cover_position
+          - delay:
+              seconds: 5
+          - condition: template
+            value_template: '{{ state_attr(''cover.gordijn_navin'', ''current_position'')
+              == 25 }}'
+    - conditions:
+      - condition: state
+        entity_id: binary_sensor.doorsensor_bedroom_navin_down_contact
+        state: 'off'
+      sequence:
+      - repeat:
+          count: 3
+          sequence:
+          - data:
+              entity_id: cover.gordijn_navin
+              position: 0
+            action: cover.set_cover_position
+          - delay:
+              seconds: 5
+          - condition: template
+            value_template: '{{ state_attr(''cover.gordijn_navin'', ''current_position'')
+              == 0 }}'
+  - repeat:
+      for_each:
+      - cover.gordijn_office_hoog
+      - cover.gordijn_office_laag
+      - cover.gordijn_woonkamer_klein_links
+      - cover.gordijn_woonkamer_klein_rechts
+      - cover.gordijn_woonkamer_groot
+      sequence:
+      - repeat:
+          count: 3
+          sequence:
+          - data:
+              entity_id: '{{ repeat.item }}'
+              position: 0
+            action: cover.set_cover_position
+          - delay:
+              seconds: 5
+          - condition: template
+            value_template: '{{ state_attr(repeat.item, ''current_position'') == 0
+              }}'
+  mode: single
+- id: '1751749490097'
+  alias: Gordijnen automatisch
+  description: Open gordijnen bij zonsopgang, sluit gordijnen bij zonsondergang
+  triggers:
+  - event: sunrise
+    offset: 0:10
+    id: open_curtains
+    trigger: sun
+  - event: sunset
+    offset: 0:25
+    id: close_curtains
+    trigger: sun
+  conditions: []
+  actions:
+  - choose:
+    - conditions:
+      - condition: trigger
+        id: open_curtains
+      sequence:
+      - action: script.open_all_curtains
+    - conditions:
+      - condition: trigger
+        id: close_curtains
+      sequence:
+      - action: script.close_all_curtains
+  mode: single
+- id: '1751959050906'
+  alias: Navin Slaapkamer - Occupancy Auto
+  description: Automatische acties bij afwezigheid slaapkamer overdag
+  triggers:
+  - trigger: state
+    entity_id: binary_sensor.athom_bedroom_multisensor_occupancy
+    to: 'off'
+    for:
+      minutes: 20
+  conditions:
+  - condition: sun
+    after: sunrise
+    after_offset: 0:10
+  - condition: sun
+    before: sunset
+    before_offset: 0:25
+  actions:
+  - if:
+    - condition: numeric_state
+      entity_id: cover.gordijn_navin
+      attribute: current_position
+      below: 50
+    then:
+    - if:
+      - condition: state
+        entity_id: binary_sensor.doorsensor_bedroom_navin_down_contact
+        state: 'on'
+      then:
+      - action: cover.set_cover_position
+        target:
+          entity_id: cover.gordijn_navin
+        data:
+          position: 100
+      else:
+      - action: cover.set_cover_position
+        target:
+          entity_id: cover.gordijn_navin
+        data:
+          position: 25
+  - action: media_player.turn_off
+    target:
+      entity_id:
+      - media_player.bedroom_tv
+      - media_player.bedroom_shield
+  - action: light.turn_off
+    target:
+      entity_id: light.navin_bedroom_light
+  mode: single
+- id: '1752350410604'
+  alias: Garage Light - Motion or Presence Triggered
+  description: Turn on garage light when motion is detected, turn off after 30s of
+    no motion
+  triggers:
+  - entity_id: sensor.0xa4c13865b908960d_motion_state
+    not_to: none
+    trigger: state
+  - entity_id: binary_sensor.0xa4c13865b908960d_presence
+    to: 'on'
+    trigger: state
+  - entity_id: binary_sensor.motion_sensor_garage_occupancy
+    to: 'on'
+    trigger: state
+  - entity_id: binary_sensor.motion_sensor_3_occupancy
+    to: 'on'
+    trigger: state
+  conditions: []
+  actions:
+  - target:
+      entity_id: light.3x_button_garage_right
+    action: light.turn_on
+    data: {}
+  - wait_for_trigger:
+    - entity_id: sensor.0xa4c13865b908960d_motion_state
+      to: none
+      trigger: state
+    - entity_id: binary_sensor.0xa4c13865b908960d_presence
+      to: 'off'
+      trigger: state
+    - entity_id: binary_sensor.motion_sensor_garage_occupancy
+      to: 'off'
+      trigger: state
+    - entity_id: binary_sensor.motion_sensor_3_occupancy
+      to: 'off'
+      trigger: state
+    timeout: 00:00:30
+    continue_on_timeout: true
+  - target:
+      entity_id: light.3x_button_garage_right
+    action: light.turn_off
+    data: {}
+  mode: restart
+- id: '1752361103224'
+  alias: Super Simple Debug
+  description: Heel eenvoudige test
+  triggers:
+  - at: '10:00:00'
+    trigger: time
+  actions:
+  - target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F9EA TEST BASIC - Automation works"
+    action: todo.add_item
+  - target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F4CA Battery sensor count: {{ states.sensor | selectattr('attributes.device_class',
+        '==', 'battery') | list | length }}"
+    action: todo.add_item
+  - target:
+      entity_id: todo.batterijen
+    data:
+      item: '⚡ Sensors under 25%: {{ states.sensor | selectattr(''attributes.device_class'',
+        ''=='', ''battery'') | selectattr(''state'', ''lt'', ''25'') | list | length
+        }}'
+    action: todo.add_item
+  mode: single
+- id: '1752362887715'
+  alias: Complete M365 Battery Automation
+  description: Volledige battery detection met MS365 Todo services
+  triggers:
+  - at: '10:00:00'
+    trigger: time
+  - at: '18:00:00'
+    trigger: time
+  - event: start
+    trigger: homeassistant
+  actions:
+  - target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F680 M365 Battery Sync Started: {{ low_battery_sensors | length
+        }} low batteries found"
+    action: todo.add_item
+  - if:
+    - condition: template
+      value_template: '{{ low_battery_sensors | length == 0 }}'
+    then:
+    - target:
+        entity_id: todo.batterijen
+      data:
+        item: ✅ No low batteries found ({{ now().strftime('%H:%M') }})
+      action: todo.add_item
+    - stop: Geen lage batterijen
+  - if:
+    - condition: template
+      value_template: '{{ states(''todo.m365_todo_tommorow'') in [''unknown'', ''unavailable'']
+        }}'
+    then:
+    - target:
+        entity_id: todo.batterijen
+      data:
+        item: ❌ M365 Todo not available
+      action: todo.add_item
+    - stop: M365 Todo niet beschikbaar
+  - repeat:
+      for_each: '{{ state_attr(''todo.m365_todo_tommorow'', ''items'') or [] }}'
+      sequence:
+      - variables:
+          todo_summary: '{{ repeat.item.summary }}'
+          is_battery_todo: "{{ todo_summary.startswith('\U0001F50B') or todo_summary.startswith('\U0001FAAB')
+            or todo_summary.startswith('\U0001F534') }}"
+      - condition: template
+        value_template: '{{ is_battery_todo }}'
+      - target:
+          entity_id: todo.m365_todo_tommorow
+        data:
+          item: '{{ todo_summary }}'
+        continue_on_error: true
+        action: todo.remove_item
+  - repeat:
+      for_each: '{{ low_battery_sensors }}'
+      sequence:
+      - variables:
+          sensor_info: '{{ repeat.item }}'
+          battery_level: '{{ sensor_info.state | int(0) }}'
+          battery_emoji: "{% if battery_level <= 5 %}\U0001FAAB {% elif battery_level
+            <= 10 %}\U0001F534 {% else %}\U0001F50B {% endif %}"
+          todo_subject: '{% if sensor_info.area != ''Unknown'' %} {{ battery_emoji
+            }} {{ sensor_info.state }}{% if sensor_info.state != ''Low'' %}%{% endif
+            %} - {{ sensor_info.name }} ({{ sensor_info.area }}) {% else %} {{ battery_emoji
+            }} {{ sensor_info.state }}{% if sensor_info.state != ''Low'' %}%{% endif
+            %} - {{ sensor_info.name }} {% endif %}'
+          today: '{{ (now() + timedelta(days=3)).date().isoformat() }}'
+          reminder_time: '{{ (now() + timedelta(days=2)).replace(hour=9, minute=0,
+            second=0, microsecond=0).isoformat() }}'
+      - target:
+          entity_id: todo.m365_todo_tommorow
+        data:
+          subject: '{{ todo_subject }}'
+          due: '{{ today }}'
+          reminder: '{{ reminder_time }}'
+          description: Battery replacement needed for {{ sensor_info.name }}
+        continue_on_error: true
+        action: ms365_todo.new_todo
+  - target:
+      entity_id: todo.batterijen
+    data:
+      item: '✅ M365 Todo synced: {{ low_battery_sensors | length }} batteries with
+        reminders ({{ now().strftime(''%H:%M'') }})'
+    action: todo.add_item
+  - repeat:
+      for_each: '{{ low_battery_sensors[:5] }}'
+      sequence:
+      - variables:
+          sensor_info: '{{ repeat.item }}'
+          battery_level: '{{ sensor_info.state | int(0) }}'
+          battery_emoji: "{% if battery_level <= 5 %}\U0001FAAB {% elif battery_level
+            <= 10 %}\U0001F534 {% else %}\U0001F50B {% endif %}"
+          todo_item: '{% if sensor_info.area != ''Unknown'' %} {{ battery_emoji }}
+            {{ sensor_info.state }}{% if sensor_info.state != ''Low'' %}%{% endif
+            %} - {{ sensor_info.name }} ({{ sensor_info.area }}) {% else %} {{ battery_emoji
+            }} {{ sensor_info.state }}{% if sensor_info.state != ''Low'' %}%{% endif
+            %} - {{ sensor_info.name }} {% endif %}'
+      - target:
+          entity_id: todo.batterijen
+        data:
+          item: '{{ todo_item }}'
+        action: todo.add_item
+  variables:
+    threshold: 20
+    exclude_entities: []
+    low_battery_sensors: '{% set result = namespace(sensors=[]) %} {% for state in
+      states.sensor | selectattr(''attributes.device_class'', ''defined'') | selectattr(''attributes.device_class'',
+      ''=='', ''battery'') %} {% set area = area_name(state.entity_id) %} {% if state.state
+      not in [''unknown'', ''unavailable''] and state.state | int(101) <= threshold
+      and state.state | int(101) >= 0 and state.entity_id not in exclude_entities
+      and area != None and area != '''' %} {% set result.sensors = result.sensors
+      + [{ ''entity_id'': state.entity_id, ''name'': state.name | replace('' Battery'',
+      '''') | replace('' battery'', ''''), ''state'': state.state, ''area'': area
+      }] %} {% endif %} {% endfor %} {% for state in states.binary_sensor | selectattr(''attributes.device_class'',
+      ''defined'') | selectattr(''attributes.device_class'', ''=='', ''battery'')
+      | selectattr(''state'', ''=='', ''on'') %} {% set area = area_name(state.entity_id)
+      %} {% if state.entity_id not in exclude_entities and area != None and area !=
+      '''' %} {% set result.sensors = result.sensors + [{ ''entity_id'': state.entity_id,
+      ''name'': state.name | replace('' Battery'', '''') | replace('' battery'', ''''),
+      ''state'': ''Low'', ''area'': area }] %} {% endif %} {% endfor %} {{ result.sensors
+      }}'
+  mode: single
+- id: '1752428956140'
+  alias: Jarvis Chat Processor
+  description: ''
+  triggers:
+  - entity_id: input_text.jarvis_chat_input
+    trigger: state
+  conditions:
+  - condition: template
+    value_template: '{{ trigger.to_state.state != trigger.from_state.state }}'
+  - condition: template
+    value_template: '{{ trigger.to_state.state | length > 0 }}'
+  - condition: state
+    entity_id: input_boolean.jarvis_chat_enabled
+    state: 'on'
+  actions:
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.jarvis_chat_response
+    data:
+      value: Jarvis is processing your request...
+  - action: conversation.process
+    data:
+      agent_id: conversation.home_assistant
+      text: 'JARVIS CHAT INTERFACE ACTIVE
+
+        User Query: {{ states(''input_text.jarvis_chat_input'') }}
+
+        PERSONALITY: {{ states(''input_select.jarvis_personality'') }} CHAT MODE:
+        {{ states(''input_select.jarvis_chat_mode'') }} OMNISCIENT: {{ ''Active''
+        if is_state(''input_boolean.jarvis_omniscient_mode'', ''on'') else ''Inactive''
+        }} DEBUG: {{ ''Active'' if is_state(''input_boolean.jarvis_debug_mode'', ''on'')
+        else ''Inactive'' }}
+
+        CURRENT SYSTEM CONTEXT: - Time: {{ now().strftime(''%A, %B %d, %Y at %H:%M'')
+        }} - System entities: {{ state_attr(''sensor.jarvis_system_info'', ''total_entities'')
+        }} - Active automations: {{ state_attr(''sensor.jarvis_automation_status'',
+        ''active_automations'') | length }} - Low batteries: {{ state_attr(''sensor.jarvis_system_info'',
+        ''low_batteries'') }} - System health: {{ state_attr(''sensor.jarvis_system_info'',
+        ''unavailable_entities'') }} issues
+
+        {% if is_state(''input_select.jarvis_chat_mode'', ''System Analysis'') %}
+        SYSTEM ANALYSIS MODE: Provide detailed technical analysis and system insights.
+        {% elif is_state(''input_select.jarvis_chat_mode'', ''Automation Creation'')
+        %} AUTOMATION CREATION MODE: Help create new automations and scripts. Offer
+        to generate YAML. {% elif is_state(''input_select.jarvis_chat_mode'', ''Troubleshooting'')
+        %} TROUBLESHOOTING MODE: Diagnose and solve system issues step by step. {%
+        elif is_state(''input_select.jarvis_chat_mode'', ''Learning Mode'') %} LEARNING
+        MODE: Explain concepts and provide educational insights with examples. {%
+        elif is_state(''input_select.jarvis_chat_mode'', ''Home Control'') %} HOME
+        CONTROL MODE: Help control devices, scenes, and automations. Offer to execute
+        actions. {% else %} ASSISTANT MODE: Provide helpful, conversational assistance.
+        {% endif %}
+
+        {% if is_state(''input_select.jarvis_personality'', ''Professional'') %} Personality:
+        Professional, efficient, formal tone. {% elif is_state(''input_select.jarvis_personality'',
+        ''Technical'') %} Personality: Technical, detailed, use proper terminology.
+        {% elif is_state(''input_select.jarvis_personality'', ''Friendly'') %} Personality:
+        Warm, supportive, encouraging tone. {% else %} Personality: Confident, helpful,
+        and slightly witty like the real Jarvis. {% endif %}
+
+        Respond as Jarvis with the specified personality and mode. Provide actionable
+        information when possible. Keep responses conversational but informative.
+
+        If the user asks for system actions, explain what I can do and offer to execute.
+        If debug mode is active, include technical details about the request processing.'
+    response_variable: jarvis_response
+  - delay:
+      seconds: 8
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.jarvis_chat_response
+    data:
+      value: '{{ jarvis_response.response.speech.plain.speech }}'
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.jarvis_chat_history
+    data:
+      value: '{{ now().strftime(''%H:%M'') }} You: {{ states(''input_text.jarvis_chat_input'')
+        }} {{ now().strftime(''%H:%M'') }} Jarvis: {{ jarvis_response.response.speech.plain.speech[:200]
+        }}...
+
+        {{ states(''input_text.jarvis_chat_history'') }}'
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.jarvis_chat_input
+    data:
+      value: ''
+  mode: single
+- id: '1752428969407'
+  alias: Jarvis Chat Processor
+  description: ''
+  triggers:
+  - entity_id: input_text.jarvis_chat_input
+    trigger: state
+  conditions:
+  - condition: template
+    value_template: '{{ trigger.to_state.state != trigger.from_state.state }}'
+  - condition: template
+    value_template: '{{ trigger.to_state.state | length > 0 }}'
+  - condition: state
+    entity_id: input_boolean.jarvis_chat_enabled
+    state: 'on'
+  actions:
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.jarvis_chat_response
+    data:
+      value: Jarvis is processing your request...
+  - action: conversation.process
+    data:
+      agent_id: conversation.home_assistant
+      text: 'JARVIS CHAT INTERFACE ACTIVE
+
+        User Query: {{ states(''input_text.jarvis_chat_input'') }}
+
+        PERSONALITY: {{ states(''input_select.jarvis_personality'') }} CHAT MODE:
+        {{ states(''input_select.jarvis_chat_mode'') }} OMNISCIENT: {{ ''Active''
+        if is_state(''input_boolean.jarvis_omniscient_mode'', ''on'') else ''Inactive''
+        }} DEBUG: {{ ''Active'' if is_state(''input_boolean.jarvis_debug_mode'', ''on'')
+        else ''Inactive'' }}
+
+        CURRENT SYSTEM CONTEXT: - Time: {{ now().strftime(''%A, %B %d, %Y at %H:%M'')
+        }} - System entities: {{ state_attr(''sensor.jarvis_system_info'', ''total_entities'')
+        }} - Active automations: {{ state_attr(''sensor.jarvis_automation_status'',
+        ''active_automations'') | length }} - Low batteries: {{ state_attr(''sensor.jarvis_system_info'',
+        ''low_batteries'') }} - System health: {{ state_attr(''sensor.jarvis_system_info'',
+        ''unavailable_entities'') }} issues
+
+        {% if is_state(''input_select.jarvis_chat_mode'', ''System Analysis'') %}
+        SYSTEM ANALYSIS MODE: Provide detailed technical analysis and system insights.
+        {% elif is_state(''input_select.jarvis_chat_mode'', ''Automation Creation'')
+        %} AUTOMATION CREATION MODE: Help create new automations and scripts. Offer
+        to generate YAML. {% elif is_state(''input_select.jarvis_chat_mode'', ''Troubleshooting'')
+        %} TROUBLESHOOTING MODE: Diagnose and solve system issues step by step. {%
+        elif is_state(''input_select.jarvis_chat_mode'', ''Learning Mode'') %} LEARNING
+        MODE: Explain concepts and provide educational insights with examples. {%
+        elif is_state(''input_select.jarvis_chat_mode'', ''Home Control'') %} HOME
+        CONTROL MODE: Help control devices, scenes, and automations. Offer to execute
+        actions. {% else %} ASSISTANT MODE: Provide helpful, conversational assistance.
+        {% endif %}
+
+        {% if is_state(''input_select.jarvis_personality'', ''Professional'') %} Personality:
+        Professional, efficient, formal tone. {% elif is_state(''input_select.jarvis_personality'',
+        ''Technical'') %} Personality: Technical, detailed, use proper terminology.
+        {% elif is_state(''input_select.jarvis_personality'', ''Friendly'') %} Personality:
+        Warm, supportive, encouraging tone. {% else %} Personality: Confident, helpful,
+        and slightly witty like the real Jarvis. {% endif %}
+
+        Respond as Jarvis with the specified personality and mode. Provide actionable
+        information when possible. Keep responses conversational but informative.
+
+        If the user asks for system actions, explain what I can do and offer to execute.
+        If debug mode is active, include technical details about the request processing.'
+    response_variable: jarvis_response
+  - delay:
+      seconds: 8
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.jarvis_chat_response
+    data:
+      value: '{{ jarvis_response.response.speech.plain.speech }}'
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.jarvis_chat_history
+    data:
+      value: '{{ now().strftime(''%H:%M'') }} You: {{ states(''input_text.jarvis_chat_input'')
+        }} {{ now().strftime(''%H:%M'') }} Jarvis: {{ jarvis_response.response.speech.plain.speech[:200]
+        }}...
+
+        {{ states(''input_text.jarvis_chat_history'') }}'
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.jarvis_chat_input
+    data:
+      value: ''
+  mode: single
+- id: '1752448287961'
+  alias: notify_light_door_unlock_flash
+  description: Hue lamp knippert + knop pulse + snapshot naar tel bij deur/auto (alleen
+    als ik weg ben)
+  triggers:
+  - entity_id: lock.nookie
+    to: unlocked
+    trigger: state
+  - entity_id: binary_sensor.reolink_video_doorbell_wifi_vehicle
+    trigger: state
+  conditions:
+  - condition: template
+    value_template: "{{ not states('binary_sensor.reolink_video_doorbell_wifi_vehicle')
+      in ['off', 'clear'] or\n   is_state('lock.nookie', 'unlocked') }}"
+  - condition: not
+    conditions:
+    - condition: state
+      entity_id: device_tracker.sm_g960f
+      state: home
+  actions:
+  - variables:
+      lamp: light.office_raam_color
+  - data:
+      scene_id: door_unlock_lamp_backup
+      snapshot_entities:
+      - '{{ lamp }}'
+    action: scene.create
+  - repeat:
+      count: 6
+      sequence:
+      - target:
+          entity_id: '{{ lamp }}'
+        data:
+          brightness: 255
+          color_temp: 250
+        action: light.turn_on
+      - delay:
+          seconds: 0.7
+      - target:
+          entity_id: '{{ lamp }}'
+        action: light.turn_off
+      - delay:
+          seconds: 0.7
+  - repeat:
+      count: 3
+      sequence:
+      - target:
+          entity_id: switch.3x_button_badkamer_navin_left
+        action: switch.turn_on
+      - delay:
+          milliseconds: 300
+      - target:
+          entity_id: switch.3x_button_badkamer_navin_left
+        action: switch.turn_off
+      - delay:
+          milliseconds: 300
+  - target:
+      entity_id: scene.door_unlock_lamp_backup
+    action: scene.turn_on
+  - data:
+      entity_id: camera.reolink_video_doorbell_wifi
+      filename: /config/www/snapshot_reolink.jpg
+    action: camera.snapshot
+  - delay:
+      seconds: 1
+  - data:
+      title: "\U0001F6AA Deur ontgrendeld of auto op oprit"
+      message: Snapshot van voordeur (je bent niet thuis)
+      data:
+        image: /local/snapshot_reolink.jpg
+    action: notify.mobile_app_navin_telefoon
+- id: '1752451413829'
+  alias: Camera op TV bij trigger
+  description: ''
+  triggers:
+  - entity_id: binary_sensor.reolink_doorbell_button
+    to: 'on'
+    trigger: state
+  actions:
+  - data:
+      entity_id: media_player.android_tv_woonkamer
+      command: 'am start -a android.intent.action.VIEW -d http://192.168.50.42:8123/lovelace/cam
+
+        '
+    action: androidtv.adb_command
+- id: '1752456236201'
+  alias: Camera naar Android TV met PiP (VLC)
+  description: ''
+  triggers:
+  - entity_id: binary_sensor.reolink_doorbell_button
+    to: 'on'
+    trigger: state
+  actions:
+  - data:
+      entity_id: media_player.bedroom_tv
+      command: 'am start -a android.intent.action.VIEW -t application/x-rtsp -d "rtsp://admin:Sapphire215!@192.168.50.164:554/h264Preview_01_sub"
+        org.videolan.vlc
+
+        '
+    action: androidtv_remote.adb_shell
+  - delay: 3
+  - data:
+      entity_id: media_player.bedroom_tv
+      command: input keyevent 3
+    action: androidtv_remote.adb_shell
+- id: '1752513738453'
+  alias: Toiletlicht – Slimme controle op beweging
+  description: Licht gaat aan als motion_state "small"/"large" is, uit na 30s "none"
+  triggers:
+  - seconds: /5
+    trigger: time_pattern
+  conditions: []
+  actions:
+  - choose:
+    - conditions:
+      - condition: or
+        conditions:
+        - condition: state
+          entity_id: sensor.0xa4c138e021fffe45_motion_state
+          state: small
+        - condition: state
+          entity_id: sensor.0xa4c138e021fffe45_motion_state
+          state: large
+      sequence:
+      - target:
+          entity_id: switch.toilet_licht_right
+        action: switch.turn_on
+    - conditions:
+      - condition: state
+        entity_id: sensor.0xa4c138e021fffe45_motion_state
+        state: none
+        for: 00:00:30
+      sequence:
+      - target:
+          entity_id: switch.toilet_licht_right
+        action: switch.turn_off
+  mode: single
+- id: '1752515561426'
+  alias: Badkamer Navin – Licht aan bij PIR, uit bij geen occupancy
+  description: ''
+  triggers:
+  - entity_id: binary_sensor.athom_badkamer_sensor_pir_sensor
+    to: 'on'
+    id: pir
+    trigger: state
+  - entity_id: binary_sensor.athom_badkamer_sensor_occupancy
+    to: 'off'
+    for:
+      minutes: 1
+    id: occupancy_off
+    trigger: state
+  conditions: []
+  actions:
+  - choose:
+    - conditions:
+      - condition: trigger
+        id: pir
+      sequence:
+      - target:
+          entity_id: light.3x_button_badkamer_navin_right
+        action: light.turn_on
+    - conditions:
+      - condition: trigger
+        id: occupancy_off
+      sequence:
+      - target:
+          entity_id: light.3x_button_badkamer_navin_right
+        action: light.turn_off
+  mode: single

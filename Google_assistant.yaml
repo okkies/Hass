@@ -1,0 +1,29 @@
+project_id: homeassistant-61623
+service_account: !include SERVICE_ACCOUNT.json
+report_state: true
+exposed_domains:
+  - switch
+  - cover
+  - scene
+  - script
+  - button
+  - climate
+  - zone
+  - light
+
+#entity_config:
+#  switch.something.bla:
+#    expose: false
+#    aliases:
+#      - alias
+#      - alias 2
+#  room: Living room
+entity_config:
+  switch.powersocket_computer:
+    expose: false
+  switch.mmwave_led_2:
+    expose: false
+  switch.mmwave_led:
+    expose: false
+
+

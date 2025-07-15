@@ -1,0 +1,108 @@
+# Core config
+default_config:
+homeassistant:
+  packages: !include_dir_named jarvis
+
+# Google Assistant via custom include
+google_assistant: !include Google_assistant2.yaml
+
+# HTTP Proxy Setup
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 172.30.33.0/24
+    - 192.168.50.10
+    - 192.168.50.0/24
+
+# TTS
+tts:
+  - platform: google_translate
+
+# Input datetime for next alarm
+input_datetime:
+  next_alarm:
+    name: Next scheduled alarm
+    has_date: true
+    has_time: true
+
+# Groups, Scripts, Scenes, Automations
+group: !include groups.yaml
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+#sensor: !include sensors.yaml        # Uncomment if used
+#input_boolean: !include unraid.yaml  # Uncomment if used
+
+# TODOist Calendar
+# calendar:
+#  - platform: todoist
+#    token: f12e0fd01aea0907b827f1e356a85b13a2cfe58f
+
+# SABnzbd
+sabnzbd:
+  api_key: dda03f89b4b24cd29d35045a817914d2
+  host: 192.168.50.10
+  name: sabnzbd
+  port: 8081
+  ssl: false
+  sensors:
+    - current_status
+    - speed
+    - queue_size
+    - queue_remaining
+    - disk_size
+    - disk_free
+    - queue_count
+    - day_size
+    - week_size
+    - month_size
+    - total_size
+
+telegram_bot:
+  - platform: polling
+    api_key: !secret telegram_api_key
+    allowed_chat_ids:
+      - !secret telegram_chat_id
+
+input_text:
+  telegram_chat_id:
+    name: Telegram Chat ID
+    initial: !secret telegram_chat_id
+    max: 20
+
+# Proximity
+proximity:
+  home:
+    devices:
+      - person.navin
+      - person.femy
+    tolerance: 200
+    unit_of_measurement: km
+
+# Wake-on-LAN
+switch:
+  - platform: wake_on_lan
+    mac: 58:11:22:B5:49:AD
+    name: "Unraid"
+    host: 192.168.50.10
+    # turn_off:
+    #   service: hassio.addon_stdin
+    #   data:
+    #     addon: core_rpc_shutdown
+    #     input: a3-pc
+
+# Basic sensors
+sensor:
+  - platform: time_date
+    display_options:
+      - "time"
+      - "date"
+      - "time_date"
+      - "date_time_utc"
+
+media_player:
+  - platform: androidtv
+    name: Bedroom TV
+    host: 192.168.50.127
+    adb_server_ip: 127.0.0.1
+    adb_server_port: 5037

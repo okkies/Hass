@@ -1,0 +1,101 @@
+google_actions:
+  filter:
+    include_domains:
+      - switch
+      - cover
+      - script
+      - button
+      - climate
+      - zone
+      - light
+      - room
+    #include_entities:
+    #include_domains:
+    exclude_entities:
+      - switch.powersocket_computer
+      - switch.powersocket_tv
+      - switch.0x54ef441000bf60de_flip_indicator_light
+      - switch.qbittorrent_alternative_speed
+      - switch.powerplug_droger_child_lock
+      - switch.2x_button_keuken_links_led_disabled_night
+      - switch.trv1_office_open_window
+      - switch.trv1_office_child_lock
+      - switch.trv2_kastenkamer_open_window
+      - switch.trv2_kastenkamer_child_lock
+      - switch.trv3_navin_bedroom_open_window
+      - switch.trv3_navin_bedroom_child_lock
+      - switch.trv4_femy_bedroom_open_window
+      - switch.trv4_femy_bedroom_child_lock
+      - switch.trv5_vide_open_window
+      - switch.trv5_vide_child_lock
+      - switch.trv6_garage_open_window
+      - switch.trv6_garage_child_lock
+      - light.extended_color_light_1
+      - light.extended_color_light_2
+      - light.extended_color_light_3
+      - light.extended_color_light_4
+      - light.extended_color_light_4_2
+      - light.extended_color_light_4_3
+      - light.extended_color_light_4_4
+      - light.extended_color_light_4_5
+      - light.extended_color_light_4_6
+      - light.extended_color_light_4_7
+      - light.extended_color_light_4_8
+      - light.extended_color_light_4_9
+      - light.extended_color_light_5
+      - light.extended_color_light_5_2
+      - light.extended_color_light_5_3
+      - light.extended_color_light_5_4
+      - light.extended_color_light_6
+      - light.extended_color_light_6_2
+      - light.extended_color_light_7
+      - light.hue_color_lamp_1
+      - light.hue_filament_bulb_1_2
+      - light.hue_filament_bulb_2
+      - light.hue_filament_bulb_3
+      - light.hue_filament_bulb_4
+      - light.hue_filament_bulb_5
+      - light.hue_liane_wall_1
+      - light.hue_liane_wall_2
+      - light.links_tv
+      - light.office_2
+      - light.esp32_status_led
+      - light.esp32_status_led_2
+      - light.office_bed_color
+      - light.office_raam_color
+      - light.office_tv_color
+      - light.0x000d6ffffe1f57e9
+      - light.toilet_wit
+      - switch.wake_on_lan
+      - switch.1x_button_toilet
+      - switch.mmwave_led
+      - switch.mmwave_led_2
+      - camera.reolink_video_doorbell_wifi_fluent
+      - switch.reolink_video_doorbell_wifi_email_on_event
+      - switch.reolink_video_doorbell_wifi_ftp_upload
+      - switch.uart_target_output
+      - switch.reolink_video_doorbell_wifi_push_notifications
+      - switch.reolink_video_doorbell_wifi_record_audio
+      - switch.reolink_video_doorbell_wifi_infra_red_lights_in_night_mode
+      - light.office_group
+      - light.vide_light_group
+      - light.femy_bedroom_lights
+      - light.navin_bedroom_light
+      - switch.zigbee2mqtt_bridge_permit_join
+      - switch.3x_button_badkamer_navin_center
+      - switch.3x_button_badkamer_navin_left
+      - switch.3x_button_badkamer_navin_right
+      - switch.mmwave_sensor
+      - switch.mmwave_sensor_2
+      - switch.uart_presence_output
+      - button.aeg_washie_the_washing_washer_executecommand_off
+      - light.hue_white_lamp_1
+      - light.overloop
+      - light.color_light_1
+#    entity_config:
+#      switch.kitchen:
+#        name: Custom Name for Google Assistant
+#        aliases:
+#         - bright lights
+#         - entry lights
+#        room: living room

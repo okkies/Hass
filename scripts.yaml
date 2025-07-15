@@ -1,0 +1,1018 @@
+check_low_batteries_and_create_todoist_tasks:
+  alias: Check low batteries and create Todoist tasks
+  mode: queued
+  sequence:
+  - variables:
+      threshold: 25
+  - variables:
+      low_batteries: "{% set list = namespace(items=[]) %} {% for s in states.sensor\n
+        \ if s.attributes.device_class == 'battery'\n  and s.state.isdigit()\n  and
+        (s.state | int(0)) < threshold %}\n  {% set list.items = list.items + [s]
+        %}\n{% endfor %} {{ list.items }}\n"
+  - repeat:
+      for_each: '{{ low_batteries }}'
+      sequence:
+      - variables:
+          sensor_name: '{{ repeat.item.name }}'
+          friendly_name: '{{ repeat.item.attributes.friendly_name or repeat.item.entity_id
+            }}'
+          already_exists: "{% set tasks = state_attr('sensor.todoist_tasks', 'items')
+            %} {{ tasks is not none and\n   tasks | selectattr('content', 'search',
+            friendly_name) | list | count > 0 }}\n"
+      - condition: template
+        value_template: '{{ not already_exists }}'
+      - data:
+          content: Batterij bijna leeg bij {{ friendly_name }}
+          priority: 3
+          due_date_string: Tomorrow
+          due_date_lang: en
+        action: todoist.new_task
+  description: ''
+check_batteries_debug_version:
+  alias: Check batteries debug version
+  mode: queued
+  sequence:
+  - variables:
+      todo_entity: todo.batterijen
+      low_threshold: 25
+      high_threshold: 30
+      battery_entities: "{% set out = [] %} {% for s in states.sensor\n  | selectattr('attributes.device_class',
+        'eq', 'battery')\n  | selectattr('state', 'match', '^[0-9.]+$') %}\n  {% set
+        name = s.name %}\n  {% set battery = s.state | float(0) %}\n  {% set already
+        = state_attr('todo.batterijen', 'items') | selectattr('message', 'eq', name)
+        | list | count > 0 %}\n  {% set item = {\n    'entity_id': s.entity_id,\n
+        \   'name': name,\n    'battery': battery,\n    'already_present': already\n
+        \ } %}\n  {% set out = out + [item] %}\n{% endfor %} {{ out }}\n"
+  - data:
+      message: 'Batterijen gevonden: {{ battery_entities | map(attribute=''name'')
+        | list }}
+
+        '
+      level: info
+    action: system_log.write
+  - repeat:
+      for_each: '{{ battery_entities }}'
+      sequence:
+      - choose:
+        - conditions:
+          - condition: template
+            value_template: '{{ repeat.item.battery < low_threshold and not repeat.item.already_present
+              }}'
+          sequence:
+          - data:
+              entity_id: '{{ todo_entity }}'
+              message: '{{ repeat.item.name }}'
+            action: todo.add_item
+          - data:
+              message: '✅ Toegevoegd: {{ repeat.item.name }} ({{ repeat.item.battery
+                }}%)'
+              level: info
+            action: system_log.write
+        - conditions:
+          - condition: template
+            value_template: '{{ repeat.item.battery > high_threshold and repeat.item.already_present
+              }}'
+          sequence:
+          - data:
+              entity_id: '{{ todo_entity }}'
+              message: '{{ repeat.item.name }}'
+            action: todo.remove_item
+          - data:
+              message: "\U0001F5D1️ Verwijderd: {{ repeat.item.name }} ({{ repeat.item.battery
+                }}%)"
+              level: info
+            action: system_log.write
+        - conditions: []
+          sequence:
+          - data:
+              message: 'ℹ️ Geen actie: {{ repeat.item.name }} ({{ repeat.item.battery
+                }}%)'
+              level: info
+            action: system_log.write
+  description: ''
+close_all_curtains:
+  sequence:
+  - if:
+    - condition: state
+      entity_id: binary_sensor.doorsensor_bedroom_navin_down_contact
+      state: 'on'
+    then:
+    - action: cover.set_cover_position
+      target:
+        entity_id: cover.gordijn_navin
+      data:
+        position: 25
+    else:
+    - action: cover.set_cover_position
+      target:
+        entity_id: cover.gordijn_navin
+      data:
+        position: 0
+  - action: cover.set_cover_position
+    target:
+      entity_id:
+      - cover.gordijn_office_hoog
+      - cover.gordijn_office_laag
+      - cover.gordijn_woonkamer_groot_links
+      - cover.gordijn_woonkamer_groot_rechts
+      - cover.gordijn_woonkamer_klein_links
+      - cover.gordijn_woonkamer_klein_rechts
+    data:
+      position: 0
+  alias: Close All Curtains
+  description: Sluit alle gordijnen - Navin afhankelijk van raamstatus
+open_all_curtains:
+  sequence:
+  - action: cover.set_cover_position
+    target:
+      entity_id:
+      - cover.gordijn_office_hoog
+      - cover.gordijn_office_laag
+      - cover.gordijn_woonkamer_groot_links
+      - cover.gordijn_woonkamer_groot_rechts
+      - cover.gordijn_woonkamer_klein_links
+      - cover.gordijn_woonkamer_klein_rechts
+    data:
+      position: 100
+  alias: Open All Curtains
+  description: Open alle gordijnen volledig
+close_all_curtains_2:
+  sequence:
+  - if:
+    - condition: state
+      entity_id: binary_sensor.doorsensor_bedroom_navin_down_contact
+      state: 'on'
+    then:
+    - action: cover.set_cover_position
+      target:
+        entity_id: cover.gordijn_navin
+      data:
+        position: 25
+    else:
+    - action: cover.set_cover_position
+      target:
+        entity_id: cover.gordijn_navin
+      data:
+        position: 0
+  - action: cover.set_cover_position
+    target:
+      entity_id:
+      - cover.gordijn_office_hoog
+      - cover.gordijn_office_laag
+      - cover.gordijn_woonkamer_groot_links
+      - cover.gordijn_woonkamer_groot_rechts
+      - cover.gordijn_woonkamer_klein_links
+      - cover.gordijn_woonkamer_klein_rechts
+    data:
+      position: 0
+  alias: Close All Curtains
+  description: Sluit alle gordijnen - Navin afhankelijk van raamstatus
+battery_detective_proper_script:
+  alias: Battery Detective (Proper Script)
+  description: Script om battery type info te vinden
+  variables:
+    low_battery_entities: "{% set result = [] %} {% for state in states.sensor | selectattr('attributes.device_class',
+      'defined') | selectattr('attributes.device_class', '==', 'battery') %}\n  {%
+      set area = area_name(state.entity_id) %}\n  {% if state.state not in ['unknown',
+      'unavailable'] and state.state | int(101) <= 25 and area != None and area !=
+      '' %}\n    {% set result = result + [state.entity_id] %}\n  {% endif %}\n{%
+      endfor %} {{ result[:3] }}"
+  sequence:
+  - action: todo.add_item
+    target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F50D Found {{ low_battery_entities | length }} low battery sensors
+        for detective work"
+  - repeat:
+      for_each: '{{ low_battery_entities }}'
+      sequence:
+      - variables:
+          sensor_entity: '{{ repeat.item }}'
+          sensor_state: '{{ states(sensor_entity) }}'
+          sensor_name: '{{ state_attr(sensor_entity, ''friendly_name'') or states[sensor_entity].name
+            }}'
+          device_id: '{{ device_id(sensor_entity) }}'
+      - action: todo.add_item
+        target:
+          entity_id: todo.batterijen
+        data:
+          item: "\U0001F50B {{ sensor_name }}: {{ sensor_state }}%"
+      - action: todo.add_item
+        target:
+          entity_id: todo.batterijen
+        data:
+          item: "\U0001F4F1 Model: {{ device_attr(device_id, 'model') or 'Unknown'
+            }} ({{ device_attr(device_id, 'manufacturer') or 'Unknown' }})"
+      - action: todo.add_item
+        target:
+          entity_id: todo.batterijen
+        data:
+          item: "\U0001F50D Attrs:  {% set attrs = states[sensor_entity].attributes
+            %} {% set interesting = [] %} {% for key, value in attrs.items() %}\n
+            \ {% if 'model' in key.lower() or 'type' in key.lower() or 'device' in
+            key.lower() or 'manufacturer' in key.lower() %}\n    {% set interesting
+            = interesting + [key + '=' + (value|string)] %}\n  {% endif %}\n{% endfor
+            %} {{ interesting | join(', ') if interesting else 'None' }}"
+      - action: todo.add_item
+        target:
+          entity_id: todo.batterijen
+        data:
+          item: '---'
+  mode: single
+cleanup_lokale_hass_todo_lijsten:
+  alias: Cleanup lokale HASS todo lijsten
+  sequence:
+  - repeat:
+      for_each:
+      - todo.hass_todo_afstuderen
+      - todo.hass_todo_auto
+      - todo.hass_todo_boodschappen
+      - todo.hass_todo_games
+      - todo.hass_todo_huis
+      - todo.hass_todo_random_stuff
+      - todo.hass_todo_slc
+      - todo.hass_todo_sql
+      - todo.hass_todo_tasks
+      - todo.hass_todo_todo
+      - todo.hass_todo_todo_tommorow
+      - todo.hass_todo_too_buy
+      - todo.hass_todo_too_sell
+      - todo.hass_todo_untitled_list
+      - todo.hass_todo_werk
+      sequence:
+      - target:
+          entity_id: '{{ repeat.item }}'
+        continue_on_error: true
+        action: todo.remove_list
+  mode: single
+  description: ''
+final_todoist_naar_m365_import:
+  alias: Final Todoist naar M365 Import
+  description: Importeert alle 107 Todoist taken naar M365 Todo
+  sequence:
+  - action: todo.add_item
+    target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F3E0 Importing to M365 Huis (39 items)..."
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_huis
+    data:
+      subject: "\U0001F50C Electrische laadpaal"
+      description: 'Imported from Todoist: To Buy inrichting'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_huis
+    data:
+      subject: "\U0001FA91 Salon tafel"
+      description: 'Imported from Todoist: To Buy inrichting'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_huis
+    data:
+      subject: "\U0001FA91 Eetkamer stoelen"
+      description: 'Imported from Todoist: To Buy inrichting'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_huis
+    data:
+      subject: "\U0001F6AA balkon hordeur"
+      description: 'Imported from Todoist: To Buy inrichting'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_huis
+    data:
+      subject: "\U0001F550 grote klok"
+      description: 'Imported from Todoist: To Buy inrichting'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_huis
+    data:
+      subject: "\U0001F50B LADDA oplaadbare batterijen 6x3"
+      description: 'Imported from Todoist: Ikea'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_huis
+    data:
+      subject: "\U0001F3FA STENKOL"
+      description: 'Imported from Todoist: Ikea'
+    continue_on_error: true
+  - action: todo.add_item
+    target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F3AE Importing to M365 Games (33 items)..."
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_games
+    data:
+      subject: "\U0001F3AE Final Fantasy 8 Remaster"
+      description: 'Imported from Todoist: Games'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_games
+    data:
+      subject: "\U0001F3AE Nier Automata"
+      description: 'Imported from Todoist: Games'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_games
+    data:
+      subject: "\U0001F3AE Warcraft 3 - remaster"
+      description: 'Imported from Todoist: Games'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_games
+    data:
+      subject: "\U0001F3AE Project eve"
+      description: 'Imported from Todoist: Games'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_games
+    data:
+      subject: "\U0001F3AE Wolverine"
+      description: 'Imported from Todoist: Games'
+    continue_on_error: true
+  - action: todo.add_item
+    target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F4CB Importing to M365 Tasks (24 items)..."
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_tasks
+    data:
+      subject: "[Automations] \U0001F327️ regen sensor, somfy dicht"
+      description: 'Imported from Todoist: Automations'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_tasks
+    data:
+      subject: "[Automations] \U0001F4DD todoist taak bij vuilnis"
+      description: 'Imported from Todoist: Automations'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_tasks
+    data:
+      subject: "[Automations] \U0001F4F1 home assistant nieuwdashboard femy proof
+        maken"
+      description: 'Imported from Todoist: Automations'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_tasks
+    data:
+      subject: "[Automations] \U0001F4FA ir afstandsbediening fixen kantoor"
+      description: 'Imported from Todoist: Automations'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_tasks
+    data:
+      subject: "[Long term] \U0001F4BE Nieuwe sas 16x"
+      description: 'Imported from Todoist: Long term'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_tasks
+    data:
+      subject: "[Long term] \U0001F4BD 8x hdd erbij"
+      description: 'Imported from Todoist: Long term'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_tasks
+    data:
+      subject: "[Long term] \U0001F504 HDD vernieuwen"
+      description: 'Imported from Todoist: Long term'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_tasks
+    data:
+      subject: "[Long term] \U0001F4DA Az-104"
+      description: 'Imported from Todoist: Long term'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_tasks
+    data:
+      subject: "[Long term] \U0001F4DC Itil foundation v4"
+      description: 'Imported from Todoist: Long term'
+    continue_on_error: true
+  - action: todo.add_item
+    target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F4DD Importing to M365 Todo tommorow (8 items)..."
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_todo_tommorow
+    data:
+      subject: "\U0001F431 Sjaakie's poepdoos leegmaken"
+      description: 'Imported from Todoist: Inbox'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_todo_tommorow
+    data:
+      subject: "\U0001F6AA Slaapkamer deur fixen"
+      description: 'Imported from Todoist: Inbox'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_todo_tommorow
+    data:
+      subject: "\U0001F50C cable management bankstel"
+      description: 'Imported from Todoist: Inbox'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_todo_tommorow
+    data:
+      subject: "\U0001F512 garage slot hangen"
+      description: 'Imported from Todoist: Inbox'
+    continue_on_error: true
+  - action: todo.add_item
+    target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F6D2 Importing to M365 Boodschappen (3 items)..."
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_boodschappen
+    data:
+      subject: "\U0001F9C8 Boter"
+      description: 'Imported from Todoist: Boodschappenlijst'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_boodschappen
+    data:
+      subject: "\U0001F36F Siroop"
+      description: 'Imported from Todoist: Boodschappenlijst'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_boodschappen
+    data:
+      subject: "\U0001F36C Groene keel snoepjes"
+      description: 'Imported from Todoist: Boodschappenlijst'
+    continue_on_error: true
+  - action: todo.add_item
+    target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F389 Todoist import completed! 107 items imported across 5 M365
+        lists"
+  mode: single
+adhd_vriendelijke_todo_structuur:
+  alias: ADHD-Vriendelijke Todo Structuur
+  description: Simpele, logische indeling zonder teringzooi
+  sequence:
+  - action: todo.add_item
+    target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F9E0 Creating ADHD-friendly structure: 6 simple lists, no chaos!"
+  - action: todo.add_item
+    target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F525 Creating NU DOEN - for urgent/today stuff..."
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_nu_doen
+    data:
+      subject: "\U0001F431 Sjaakie's poepdoos leegmaken"
+      description: 'URGENT/TODAY: From Todoist Inbox'
+      due: '{{ now().date().isoformat() }}'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_nu_doen
+    data:
+      subject: "\U0001F512 Garage slot hangen"
+      description: 'URGENT/TODAY: From Todoist Inbox'
+      due: '{{ now().date().isoformat() }}'
+    continue_on_error: true
+  - action: todo.add_item
+    target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F6D2 Creating BOODSCHAPPEN - simple shopping list..."
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_boodschappen
+    data:
+      subject: "\U0001F9C8 Boter"
+      description: 'Shopping: From Todoist'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_boodschappen
+    data:
+      subject: "\U0001F36F Siroop"
+      description: 'Shopping: From Todoist'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_boodschappen
+    data:
+      subject: "\U0001F36C Groene keel snoepjes"
+      description: 'Shopping: From Todoist'
+    continue_on_error: true
+  - action: todo.add_item
+    target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F3E0 Creating HUIS - everything house-related..."
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_huis
+    data:
+      subject: "\U0001F50C Electrische laadpaal kopen"
+      description: 'HOUSE: From Todoist inrichting'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_huis
+    data:
+      subject: "\U0001FA91 Salon tafel uitzoeken"
+      description: 'HOUSE: From Todoist inrichting'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_huis
+    data:
+      subject: "\U0001F6AA Slaapkamer deur fixen"
+      description: 'HOUSE: From Todoist Inbox'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_huis
+    data:
+      subject: "\U0001F50B IKEA: LADDA batterijen kopen"
+      description: 'HOUSE: From Todoist IKEA'
+    continue_on_error: true
+  - action: todo.add_item
+    target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F454 Creating WERK - all work stuff together..."
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_work
+    data:
+      subject: "\U0001F4BE Nieuwe SAS drives plannen"
+      description: 'WORK: From Todoist Long term'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_work
+    data:
+      subject: "\U0001F4DA Az-104 certificering starten"
+      description: 'WORK: From Todoist Long term'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_work
+    data:
+      subject: "\U0001F4DC ITIL foundation v4 boeken"
+      description: 'WORK: From Todoist Long term'
+    continue_on_error: true
+  - action: todo.add_item
+    target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F3AE Creating GAMES - pure fun stuff..."
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_games
+    data:
+      subject: "\U0001F3AE Final Fantasy 8 Remaster spelen"
+      description: 'FUN: From Todoist Games'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_games
+    data:
+      subject: "\U0001F3AE Nier Automata uitspelen"
+      description: 'FUN: From Todoist Games'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_games
+    data:
+      subject: "\U0001F3AE Warcraft 3 remaster proberen"
+      description: 'FUN: From Todoist Games'
+    continue_on_error: true
+  - action: todo.add_item
+    target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F916 Creating NERD SHIT - all the techy fun stuff..."
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_nerd_shit
+    data:
+      subject: "\U0001F327️ Regen sensor + Somfy automatisering"
+      description: 'NERD: From Todoist Automations'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_nerd_shit
+    data:
+      subject: "\U0001F4F1 HA dashboard Femy-proof maken"
+      description: 'NERD: From Todoist Automations'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_nerd_shit
+    data:
+      subject: "\U0001F4FA IR remote kantoor fixen"
+      description: 'NERD: From Todoist Automations'
+    continue_on_error: true
+  - action: ms365_todo.new_todo
+    target:
+      entity_id: todo.m365_nerd_shit
+    data:
+      subject: "\U0001F50B Battery monitoring perfectioneren"
+      description: 'NERD: Today''s achievement!'
+    continue_on_error: true
+  - action: todo.add_item
+    target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F389 ADHD-friendly structure created! 6 simple lists: NU DOEN,
+        BOODSCHAPPEN, HUIS, WERK, GAMES, NERD SHIT"
+  - action: todo.add_item
+    target:
+      entity_id: todo.batterijen
+    data:
+      item: "\U0001F4A1 Pro tip: Start always with NU DOEN list - that's your daily
+        focus!"
+  mode: single
+jarvis_turn_off_all_lights:
+  alias: Jarvis - Turn Off All Lights
+  sequence:
+  - action: light.turn_off
+    target:
+      entity_id: all
+  - action: notify.notify
+    data:
+      title: "\U0001F4A1 Jarvis"
+      message: All lights have been turned off, sir.
+jarvis_night_mode:
+  alias: Jarvis - Night Mode
+  sequence:
+  - action: light.turn_off
+    data:
+      transition: 3
+    target:
+      entity_id: all
+  - action: notify.notify
+    data:
+      title: "\U0001F319 Jarvis Night Mode"
+      message: Night mode activated. All systems secured for sleep.
+jarvis_morning_routine:
+  alias: Jarvis - Morning Routine
+  sequence:
+  - action: light.turn_on
+    data:
+      brightness_pct: 80
+    target:
+      area_id: living_room
+  - action: notify.notify
+    data:
+      title: "\U0001F305 Jarvis Good Morning"
+      message: Good morning, sir. Systems are ready for the day.
+jarvis_panic_protocol:
+  alias: Jarvis - Panic Protocol
+  sequence:
+  - action: light.turn_on
+    data:
+      flash: short
+      brightness_pct: 100
+    target:
+      entity_id: all
+  - action: notify.notify
+    data:
+      title: "\U0001F6A8 JARVIS PANIC PROTOCOL"
+      message: Emergency protocol activated. All lights flashing.
+jarvis_system_status_check:
+  alias: Jarvis - System Status Check
+  sequence:
+  - action: shell_command.jarvis_system_stats
+  - action: input_text.set_value
+    target:
+      entity_id: input_text.jarvis_chat_response
+    data:
+      value: "\U0001F4CA JARVIS SYSTEM STATUS\n- Total entities: {{ state_attr('sensor.jarvis_system_info',
+        'total_entities') }} - Unavailable: {{ state_attr('sensor.jarvis_system_info',
+        'unavailable_entities') }} - Low batteries: {{ state_attr('sensor.jarvis_system_info',
+        'low_batteries') }} - Lights on: {{ states.light | selectattr('state', '==',
+        'on') | list | length }} - Health: {{ state_attr('sensor.jarvis_watchdog_status',
+        'health_score') }}%\nStatus checked at {{ now().strftime('%H:%M:%S') }}"
+  - action: notify.notify
+    data:
+      title: "\U0001F4CA Jarvis Status"
+      message: '{{ states(''input_text.jarvis_chat_response'')[:200] }}...'
+jarvis_deep_system_analysis:
+  alias: Jarvis - Deep System Analysis
+  sequence:
+  - action: shell_command.jarvis_system_stats
+  - action: conversation.process
+    data:
+      agent_id: conversation.home_assistant
+      text: 'JARVIS DEEP SYSTEM ANALYSIS
+
+        Perform comprehensive system analysis: - Total entities: {{ state_attr(''sensor.jarvis_system_info'',
+        ''total_entities'') }} - System health: {{ state_attr(''sensor.jarvis_watchdog_status'',
+        ''health_score'') }}% - Critical issues: {{ state_attr(''sensor.jarvis_system_info'',
+        ''unavailable_entities'') }} - Battery status: {{ state_attr(''sensor.jarvis_system_info'',
+        ''low_batteries'') }} low
+
+        Provide detailed analysis and recommendations in Dutch.'
+    response_variable: jarvis_response
+  - action: notify.notify
+    data:
+      title: "\U0001F50D Jarvis Deep Analysis"
+      message: '{{ jarvis_response.response.speech.plain.speech[:300] }}...'
+jarvis_fallback_handler:
+  alias: Jarvis Fallback Handler
+  sequence:
+  - action: logbook.log
+    data:
+      name: Jarvis Fallback
+      message: Fallback protocol executed - {{ now().strftime('%H:%M:%S') }}
+  - condition: state
+    entity_id: input_boolean.jarvis_error_suppression
+    state: 'off'
+  - action: notify.notify
+    data:
+      title: ⛔ Jarvis Fallback Activated
+      message: Error detected. Fallback protocol engaged.
+  - action: todo.add_item
+    target:
+      entity_id: todo.m365_automations
+    data:
+      item: ⚠️ Jarvis fallback executed - investigation needed
+jarvis_emergency_fallback:
+  alias: Jarvis Emergency Fallback
+  sequence:
+  - action: input_boolean.turn_off
+    target:
+      entity_id:
+      - input_boolean.jarvis_autonomous_learning
+      - input_boolean.jarvis_autonomous_development
+      - input_boolean.jarvis_adaptive_automation
+  - action: input_select.select_option
+    target:
+      entity_id: input_select.jarvis_modification_mode
+    data:
+      option: Disabled
+  - action: notify.notify
+    data:
+      title: "\U0001F6A8 JARVIS EMERGENCY FALLBACK"
+      message: Critical errors detected. All autonomous features disabled.
+  - action: telegram_bot.send_message
+    data:
+      target: 409230174
+      message: "\U0001F6A8 JARVIS EMERGENCY FALLBACK ACTIVATED - Manual intervention
+        may be required"
+jarvis_automatic_recovery_attempt:
+  alias: Jarvis Automatic Recovery Attempt
+  sequence:
+  - action: input_select.select_option
+    target:
+      entity_id: input_select.jarvis_recovery_status
+    data:
+      option: Recovery Mode
+  - action: shell_command.jarvis_check_config
+  - delay: 10
+  - action: conversation.process
+    data:
+      agent_id: conversation.home_assistant
+      text: 'JARVIS AUTOMATIC RECOVERY PROTOCOL
+
+        System malfunction detected. Attempting autonomous recovery.
+
+        CURRENT STATUS: - Error count: {{ state_attr(''sensor.jarvis_error_status'',
+        ''total_errors'') }} - Error rate: {{ state_attr(''sensor.jarvis_error_status'',
+        ''error_rate'') }}% - System health: {{ state_attr(''sensor.jarvis_watchdog_status'',
+        ''health_score'') }}% - Last error: {{ states(''input_datetime.last_jarvis_error'')
+        }}
+
+        Diagnose the issues and provide recovery steps: 1. Root cause analysis 2.
+        Immediate recovery actions 3. Prevention measures 4. System stabilization
+        steps
+
+        Focus on restoring normal operation quickly and safely.'
+    response_variable: jarvis_response
+  - delay: 12
+  - action: notify.notify
+    data:
+      title: "\U0001F527 Jarvis Recovery Attempt"
+      message: '{{ jarvis_response.response.speech.plain.speech[:200] }}...'
+jarvis_error_analysis:
+  alias: Jarvis Error Analysis
+  sequence:
+  - action: conversation.process
+    data:
+      agent_id: conversation.home_assistant
+      text: 'JARVIS ERROR PATTERN ANALYSIS
+
+        ERROR STATISTICS: - AI errors: {{ states(''counter.jarvis_ai_errors'') }}
+        - Script errors: {{ states(''counter.jarvis_script_errors'') }} - Error rate:
+        {{ state_attr(''sensor.jarvis_error_status'', ''error_rate'') }}% - Total
+        operations: {{ states(''counter.jarvis_total_operations'') }} - Successful
+        recoveries: {{ states(''counter.jarvis_successful_recoveries'') }}
+
+        SYSTEM CONTEXT: - Current health: {{ state_attr(''sensor.jarvis_watchdog_status'',
+        ''health_score'') }}% - Last error time: {{ states(''input_datetime.last_jarvis_error'')
+        }} - Recovery status: {{ states(''input_select.jarvis_recovery_status'') }}
+
+        Analyze error patterns and provide: 1. Error trend analysis (increasing/decreasing/stable)
+        2. Most likely root causes 3. Preventive measures to implement 4. System hardening
+        recommendations 5. Monitoring improvements needed
+
+        Focus on making the system more resilient and self-healing.'
+    response_variable: jarvis_response
+  - delay: 15
+  - action: todo.add_item
+    target:
+      entity_id: todo.m365_automations
+    data:
+      item: "\U0001F4CA Jarvis Error Analysis: {{ jarvis_response.response.speech.plain.speech[:120]
+        }}..."
+jarvis_system_self_improvement:
+  alias: Jarvis System Self-Improvement
+  sequence:
+  - action: shell_command.jarvis_analyze_config_structure
+  - action: shell_command.jarvis_read_jarvis_modules
+  - delay: 3
+  - action: conversation.process
+    data:
+      agent_id: conversation.home_assistant
+      text: 'JARVIS SELF-IMPROVEMENT SESSION
+
+        Weekly system analysis for autonomous improvement: - Current performance:
+        {{ state_attr(''sensor.jarvis_watchdog_status'', ''health_score'') }}% - Learning
+        sessions: {{ states(''counter.jarvis_learning_sessions'') }} - Improvements
+        made: {{ states(''counter.jarvis_improvements_made'') }}
+
+        Analyze system patterns and suggest improvements for: 1. Automation efficiency
+        2. Error reduction 3. Response accuracy 4. Resource optimization 5. User experience
+        enhancement
+
+        Provide specific, actionable recommendations.'
+    response_variable: jarvis_response
+jarvis_generate_missing_script:
+  alias: Jarvis Generate Missing Script
+  sequence:
+  - action: conversation.process
+    data:
+      agent_id: conversation.home_assistant
+      text: 'JARVIS AUTONOMOUS SCRIPT GENERATION
+
+        Analyze current scripts and generate a useful missing script. Current script
+        count: {{ state_attr(''sensor.jarvis_system_info'', ''scripts_count'') }}
+
+        Generate a practical script that would improve system functionality. Format
+        as complete YAML script definition.'
+      response_variable: jarvis_response
+  - action: notify.notify
+    data:
+      title: "\U0001F527 Jarvis Script Generation"
+      message: '{{ jarvis_response.response.speech.plain.speech[:200] }}...'
+jarvis_emergency_recovery:
+  alias: Jarvis Emergency Recovery
+  sequence:
+  - action: shell_command.jarvis_backup_config
+  - action: shell_command.jarvis_check_config
+  - action: notify.notify
+    data:
+      title: "\U0001F198 Jarvis Emergency Recovery"
+      message: Emergency recovery protocol initiated. Backup created.
+  - action: input_select.select_option
+    target:
+      entity_id: input_select.jarvis_recovery_status
+    data:
+      option: Recovery Mode
+jarvis_analyze_behavior_patterns:
+  alias: Jarvis Analyze Behavior Patterns
+  sequence:
+  - action: conversation.process
+    data:
+      agent_id: conversation.home_assistant
+      text: 'JARVIS BEHAVIOR PATTERN ANALYSIS
+
+        Analyze user behavior patterns: - Light usage patterns - Automation triggers
+        - Time-based activities
+
+        Identify opportunities for new automations.'
+      response_variable: jarvis_response
+jarvis_generate_adaptive_automation:
+  alias: Jarvis Generate Adaptive Automation
+  sequence:
+  - action: conversation.process
+    data:
+      agent_id: conversation.home_assistant
+      text: 'JARVIS ADAPTIVE AUTOMATION GENERATION
+
+        Based on behavior analysis, generate new automation suggestions. Focus on
+        improving user experience and system efficiency.'
+      response_variable: jarvis_response
+  - action: todo.add_item
+    target:
+      entity_id: todo.m365_automations
+    data:
+      item: "\U0001F916 New automation suggestion: {{ jarvis_response.response.speech.plain.speech[:100]
+        }}..."
+jarvis_autonomous_config_optimization:
+  alias: Jarvis Autonomous Config Optimization
+  sequence:
+  - action: shell_command.jarvis_analyze_config_structure
+  - action: conversation.process
+    data:
+      agent_id: conversation.home_assistant
+      text: 'JARVIS CONFIG OPTIMIZATION
+
+        Analyze configuration for optimization opportunities: - Performance improvements
+        - Resource usage optimization - Code efficiency enhancements
+
+        Provide specific optimization recommendations.'
+      response_variable: jarvis_response
+  - action: notify.notify
+    data:
+      title: ⚙️ Jarvis Config Optimization
+      message: '{{ jarvis_response.response.speech.plain.speech[:200] }}...'
+stream_reolink_in_pip_op_tv:
+  alias: "\U0001F4F9 Stream Reolink in PiP op TV"
+  icon: mdi:television-play
+  mode: single
+  sequence:
+  - target:
+      device_id: fdec3936059a5a7868d22b039a5f7025
+    data:
+      command: 'am start -n org.videolan.vlc/org.videolan.vlc.StartActivity -a android.intent.action.VIEW
+        -d "rtsp://admin:Sapphire215!@192.168.50.164:554/h264Preview_01_sub"
+
+        '
+    action: androidtv.adb_command
+  - delay: 3
+  - target:
+      device_id: fdec3936059a5a7868d22b039a5f7025
+    data:
+      command: input keyevent 3
+    action: androidtv.adb_command
+  - delay: 30
+  - target:
+      device_id: fdec3936059a5a7868d22b039a5f7025
+    data:
+      command: am force-stop org.videolan.vlc
+    action: androidtv.adb_command
+  description: ''
+stream_reolink_in_pip_op_tv_duplicate:
+  sequence:
+  - target:
+      device_id: fdec3936059a5a7868d22b039a5f7025
+    data:
+      command: 'am start -n org.videolan.vlc/org.videolan.vlc.StartActivity -a android.intent.action.VIEW
+        -d "rtsp://admin:Sapphire215!@192.168.50.164:554/h264Preview_01_sub"
+
+        '
+    action: androidtv.adb_command
+  - delay: 3
+  - target:
+      device_id: fdec3936059a5a7868d22b039a5f7025
+    data:
+      command: input keyevent 3
+    action: androidtv.adb_command
+  - delay: 30
+    enabled: false
+  - target:
+      device_id: fdec3936059a5a7868d22b039a5f7025
+    data:
+      command: am force-stop org.videolan.vlc
+    action: androidtv.adb_command
+    enabled: false
+  alias: "\U0001F4F9 Stream Reolink in PiP op TV (Duplicate)"
+  icon: mdi:television-play
+  mode: single
+  description: ''
