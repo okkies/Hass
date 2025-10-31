@@ -1,0 +1,134 @@
+blueprint:
+  name: Office Motion Activated Lights
+  description: |
+    Turn on office lights when motion detected and it's dark.
+    Dims lights at night for comfort. Respects motion override helper.
+  domain: automation
+  input:
+    motion_sensor:
+      name: Motion Sensor
+      description: The occupancy sensor (Everything Presence)
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: occupancy
+    illuminance_sensor:
+      name: Illuminance Sensor
+      description: Light level sensor
+      selector:
+        entity:
+          domain: sensor
+          device_class: illuminance
+    light_entity:
+      name: Office Light
+      description: The light to control
+      selector:
+        entity:
+          domain: light
+    motion_override:
+      name: Motion Override Helper
+      description: When ON, disable motion automation
+      selector:
+        entity:
+          domain: input_boolean
+    lux_threshold:
+      name: Lux Threshold
+      description: Only turn on lights when below this lux level
+      default: 100
+      selector:
+        number:
+          min: 0
+          max: 500
+          step: 10
+          unit_of_measurement: lx
+    day_brightness:
+      name: Day Brightness
+      description: Brightness during day (07:00-22:00)
+      default: 255
+      selector:
+        number:
+          min: 1
+          max: 255
+          step: 1
+    night_brightness:
+      name: Night Brightness
+      description: Brightness at night (22:00-07:00)
+      default: 50
+      selector:
+        number:
+          min: 1
+          max: 255
+          step: 1
+    no_motion_wait:
+      name: No Motion Wait
+      description: Time to wait before turning off after no motion
+      default: 120
+      selector:
+        number:
+          min: 0
+          max: 600
+          step: 10
+          unit_of_measurement: seconds
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: state
+    entity_id: !input motion_sensor
+    to: "on"
+  - platform: state
+    entity_id: !input motion_sensor
+    to: "off"
+    for:
+      seconds: !input no_motion_wait
+
+condition: []
+
+action:
+  - choose:
+      # Motion detected - turn on if dark enough and override is off
+      - conditions:
+          - condition: state
+            entity_id: !input motion_sensor
+            state: "on"
+          - condition: state
+            entity_id: !input motion_override
+            state: "off"
+          - condition: numeric_state
+            entity_id: !input illuminance_sensor
+            below: !input lux_threshold
+        sequence:
+          - choose:
+              # Night mode (22:00 - 07:00) - dim lights
+              - conditions:
+                  - condition: time
+                    after: "22:00:00"
+                    before: "07:00:00"
+                sequence:
+                  - service: light.turn_on
+                    target:
+                      entity_id: !input light_entity
+                    data:
+                      brightness: !input night_brightness
+                      transition: 2
+            # Day mode - full brightness
+            default:
+              - service: light.turn_on
+                target:
+                  entity_id: !input light_entity
+                data:
+                  brightness: !input day_brightness
+                  transition: 1
+      
+      # No motion - turn off
+      - conditions:
+          - condition: state
+            entity_id: !input motion_sensor
+            state: "off"
+        sequence:
+          - service: light.turn_off
+            target:
+              entity_id: !input light_entity
+            data:
+              transition: 3
