@@ -1,0 +1,84 @@
+blueprint:
+  name: Office Aqara Button Controller
+  description: Complete control setup for office Aqara button with all 4 button actions
+  domain: automation
+  input:
+    button_sensor:
+      name: Button Action Sensor
+      description: The action sensor for the Aqara button
+      selector:
+        entity:
+          domain: sensor
+    office_light:
+      name: Office Light
+      description: The office light entity to control
+      selector:
+        entity:
+          domain: light
+    navin_socket:
+      name: Navin Socket
+      description: Navin workstation power socket
+      selector:
+        entity:
+          domain: switch
+    femy_socket:
+      name: Femy Socket  
+      description: Femy workstation power socket
+      selector:
+        entity:
+          domain: switch
+    motion_override:
+      name: Motion Override Helper
+      description: Toggle helper for motion automation override
+      selector:
+        entity:
+          domain: input_boolean
+
+trigger:
+  - platform: state
+    entity_id: !input button_sensor
+    to:
+      - single_left
+      - single_left_down
+      - single_right
+      - single_right_down
+
+action:
+  - choose:
+      # Left Top - Toggle Office Lights
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.to_state.state == 'single_left' }}"
+        sequence:
+          - service: light.toggle
+            target:
+              entity_id: !input office_light
+      
+      # Left Down - Toggle Navin Socket
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.to_state.state == 'single_left_down' }}"
+        sequence:
+          - service: switch.toggle
+            target:
+              entity_id: !input navin_socket
+      
+      # Right Top - Toggle Motion Override
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.to_state.state == 'single_right' }}"
+        sequence:
+          - service: input_boolean.toggle
+            target:
+              entity_id: !input motion_override
+      
+      # Right Down - Toggle Femy Socket
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.to_state.state == 'single_right_down' }}"
+        sequence:
+          - service: switch.toggle
+            target:
+              entity_id: !input femy_socket
+
+mode: single
