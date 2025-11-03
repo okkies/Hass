@@ -1,100 +1,58 @@
-# Litter Robot – Universal To-Do Task Generator (v3.0 - Zero Errors Edition)
-# Authors: okkies666, Grok, Claude, Community Contributors
-# Description: Bulletproof automation for Litter Robot sensors with comprehensive error handling
-# Compatible: Home Assistant 2024.1.0+ (uses modern patterns, no deprecated features)
-# Last Updated: July 2025
-
 blueprint:
-  name: "Litter Robot – Universal To-Do Task Generator v3.0"
-  description: >
-    Production-ready automation for Litter Robot maintenance tasks. Creates smart to-do items 
-    based on waste drawer fullness, litter levels, and device status codes. Features zero-error 
-    operation, automatic task cleanup, and multi-platform support (MS365, Google Tasks, Todoist, 
-    Local To-Do). Includes 25+ status code mappings and predictive maintenance capabilities.
+  name: Litter Robot Smart Task Manager
+  description: |
+    Intelligently manages Litter Robot maintenance tasks. 
+    Creates tasks when needed and automatically removes them when issues are resolved.
+    Works with Home Assistant's local todo lists (Shopping List or custom lists).
+    
+    Features:
+    - Creates tasks based on waste level thresholds
+    - Monitors status codes for issues
+    - Automatically removes tasks when problems are fixed
+    - Prevents duplicate tasks
+    - Smart priority system
   domain: automation
-  source_url: https://github.com/okkies/Hass/blob/main/litter-robot-todo-blueprint-v3
-  homeassistant:
-    min_version: 2024.1.0
   input:
-    # Primary Configuration
+    waste_sensor:
+      name: Waste Drawer Sensor
+      description: Select your Litter Robot waste drawer level sensor
+      selector:
+        entity:
+          domain: sensor
+      default: sensor.pollies_poeptroon_waste_drawer
+    
+    status_sensor:
+      name: Status Code Sensor
+      description: Select your Litter Robot status code sensor
+      selector:
+        entity:
+          domain: sensor
+      default: sensor.pollies_poeptroon_status_code
+    
     todo_entity:
-      name: To-Do List Entity
-      description: Select your to-do list integration (MS365, Google Tasks, Todoist, or Local)
+      name: To-Do List
+      description: |
+        Select a LOCAL todo list (e.g., todo.shopping_list).
+        Note: Todoist integration is read-only and won't work!
       selector:
         entity:
-          filter:
-            domain: todo
+          domain: todo
+      default: todo.shopping_list
     
-    # Feature Toggles
-    enable_percent_triggers:
-      name: Enable Waste/Litter Level Monitoring
-      description: Monitor percentage-based sensors for waste drawer and litter levels
-      default: true
-      selector:
-        boolean: {}
-    
-    enable_status_triggers:
-      name: Enable Status Code Monitoring
-      description: Create tasks for device errors and maintenance conditions
-      default: true
-      selector:
-        boolean: {}
-    
-    enable_error_triggers:
-      name: Enable Connectivity Monitoring
-      description: Alert when sensors become unavailable or lose connection
-      default: true
-      selector:
-        boolean: {}
-    
-    enable_predictive_maintenance:
-      name: Enable Predictive Maintenance
-      description: Create proactive tasks based on usage patterns
-      default: false
-      selector:
-        boolean: {}
-    
-    # Sensor Selection
-    percent_sensors:
-      name: Percentage-Based Sensors
-      description: >
-        Select sensors that report percentage values (waste drawer fullness, 
-        litter level, hopper state). Leave empty to disable percentage monitoring.
-      default: []
-      selector:
-        entity:
-          filter:
-            domain: sensor
-          multiple: true
-    
-    status_code_sensors:
-      name: Status Code Sensors
-      description: >
-        Select sensors that report device status codes. These typically have 
-        entity IDs ending in '_status_code' or similar. Leave empty to disable.
-      default: []
-      selector:
-        entity:
-          filter:
-            domain: sensor
-          multiple: true
-    
-    # Thresholds
-    percent_threshold:
-      name: Warning Threshold
-      description: Percentage that triggers a warning task (yellow priority)
+    warning_threshold:
+      name: Warning Threshold (%)
+      description: Create warning task when waste drawer reaches this level
       default: 75
       selector:
         number:
           min: 50
-          max: 95
+          max: 89
           step: 5
           unit_of_measurement: "%"
-          mode: slider
     
     critical_threshold:
-      name: Critical Threshold
-      description: Percentage that triggers an urgent task (red priority)
+      name: Critical Threshold (%)
+      description: Create critical task when waste drawer reaches this level
       default: 90
       selector:
         number:
@@ -102,490 +60,321 @@ blueprint:
           max: 100
           step: 5
           unit_of_measurement: "%"
-          mode: slider
     
-    # Task Configuration
-    due_time:
-      name: Default Due Time
-      description: Time of day for task due dates (24-hour format)
-      default: "18:00"
+    auto_remove_tasks:
+      name: Auto Remove Fixed Tasks
+      description: Automatically remove tasks when issues are resolved
+      default: true
       selector:
-        time: {}
+        boolean:
     
     task_prefix:
-      name: Task Title Prefix
-      description: Optional prefix for all created tasks (e.g., "Cats:")
-      default: ""
+      name: Task Prefix
+      description: Prefix to identify Litter Robot tasks (for cleanup)
+      default: "[LR]"
       selector:
-        text: {}
-    
-    # Advanced Options
-    max_retries:
-      name: Maximum API Retries
-      description: Number of retries for failed to-do list operations
-      default: 3
-      selector:
-        number:
-          min: 1
-          max: 5
-          step: 1
-          mode: box
-    
-    retry_delay:
-      name: Retry Delay (seconds)
-      description: Wait time between API retry attempts
-      default: 2
-      selector:
-        number:
-          min: 1
-          max: 10
-          step: 1
-          unit_of_measurement: "seconds"
-          mode: box
-    
-    # Status Code Mapping (Comprehensive 25+ codes)
-    status_code_map:
-      name: Status Code Mappings
-      description: >
-        Maps device codes to human-readable tasks. Format: 
-        code: [title, emoji, description, priority]
-        Priority: 0=info, 1=warning, 2=critical
-      default:
-        # Normal Operations
-        'rdy': ["Ready", "✅", "Litter Robot is ready for use", 0]
-        'ccc': ["Clean Cycle Complete", "🔄", "Cleaning cycle finished successfully", 0]
-        'ccp': ["Clean Cycle In Progress", "🔄", "Currently cleaning", 0]
-        
-        # Cat Detection
-        'cd': ["Cat Detected", "🐱", "Cat detected, waiting to start cycle", 0]
-        'cst': ["Cat Sensor Timing", "⏱️", "Cat sensor timing adjustment needed", 1]
-        'csi': ["Cat Sensor Interrupted", "🐱", "Cat returned during countdown", 0]
-        'csf': ["Cat Sensor Fault", "❌", "Cat sensor malfunction detected", 2]
-        'cs1': ["Cat Sensor Timing Issue", "⏱️", "Sensor timing fault phase 1", 1]
-        'cs2': ["Cat Sensor Timing Issue", "⏱️", "Sensor timing fault phase 2", 1]
-        'cs3': ["Cat Sensor Timing Issue", "⏱️", "Sensor timing fault phase 3", 1]
-        
-        # Waste Drawer
-        'df1': ["Drawer Almost Full", "🟡", "Waste drawer needs attention soon", 1]
-        'df2': ["Drawer Full", "🔴", "Waste drawer is full - empty immediately", 2]
-        'dfs': ["Drawer Full Sensor", "🔴", "Drawer sensor triggered - check drawer", 2]
-        
-        # Mechanical Issues
-        'br': ["Bonnet Removed", "🔧", "Top bonnet has been removed", 1]
-        'pd': ["Pinch Detected", "⚠️", "Obstruction detected during rotation", 2]
-        'otf': ["Over Torque Fault", "⚡", "Motor torque exceeded safe limits", 2]
-        'dhf': ["Dump Home Fault", "❌", "Failed to return to home position", 2]
-        'dpf': ["Dump Position Fault", "❌", "Failed to reach dump position", 2]
-        'hpf': ["Home Position Fault", "❌", "Cannot find home position", 2]
-        
-        # Power & System
-        'p': ["Paused", "⏸️", "Cycle paused by user", 0]
-        'off': ["Powered Off", "🔌", "Unit is powered off", 1]
-        'slp': ["Sleep Mode", "😴", "Unit in sleep mode", 0]
-        
-        # Litter Level
-        'ls': ["Litter Low", "📉", "Litter level is getting low", 1]
-        'llf': ["Litter Level Fault", "❌", "Litter level sensor error", 1]
-        
-        # Additional Faults
-        'ec': ["Excessive Cycling", "🔄", "Too many cycles detected", 1]
-        'of': ["Overload Fault", "⚠️", "Weight overload detected", 2]
-        'pf': ["Pinch Fault", "⚠️", "Pinch condition fault", 2]
-        'ps0': ["Power Supply Low", "🔋", "Low voltage detected", 1]
-        'ps1': ["Power Supply High", "🔋", "High voltage detected", 1]
-        'ms': ["Motor Stall", "⚙️", "Motor has stalled", 2]
-        'msf': ["Motor Stall Fault", "⚙️", "Motor stall fault detected", 2]
-        'po': ["Power Loss", "⚡", "Unexpected power loss", 1]
-        'rst': ["Reset", "🔄", "Device was reset", 0]
-      selector:
-        object: {}
-    
-    # Notification Options
-    enable_notifications:
-      name: Enable Mobile Notifications
-      description: Send notifications for critical events
-      default: false
-      selector:
-        boolean: {}
-    
-    notification_device:
-      name: Notification Device
-      description: Mobile device for notifications (requires companion app)
-      default: ""
-      selector:
-        device:
-          integration: mobile_app
+        text:
 
-# Automation Configuration
-mode: parallel
-max: 10
+mode: restart
 max_exceeded: silent
 
-# Variables Definition
 variables:
-  todo: !input todo_entity
-  percent_sensors_input: !input percent_sensors
-  status_sensors_input: !input status_code_sensors
-  threshold: !input percent_threshold
-  critical: !input critical_threshold
-  code_map: !input status_code_map
-  due_time_input: !input due_time
-  task_prefix: !input task_prefix
-  max_retries: !input max_retries
-  retry_delay: !input retry_delay
-  enable_percent: !input enable_percent_triggers
-  enable_status: !input enable_status_triggers
-  enable_error: !input enable_error_triggers
-  enable_predictive: !input enable_predictive_maintenance
-  enable_notify: !input enable_notifications
-  notify_device: !input notification_device
-  
-  # Computed variables
-  percent_sensors: "{{ percent_sensors_input if percent_sensors_input else [] }}"
-  status_sensors: "{{ status_sensors_input if status_sensors_input else [] }}"
-  all_sensors: "{{ percent_sensors + status_sensors }}"
-  due_hour: "{{ due_time_input.split(':')[0] | int(18) }}"
-  due_minute: "{{ due_time_input.split(':')[1] | int(0) if ':' in due_time_input else 0 }}"
+  waste_level: "{{ states(waste_sensor) | int(0) }}"
+  current_status: "{{ states(status_sensor) | lower }}"
+  todo_list: !input todo_entity
+  warning_level: !input warning_threshold
+  critical_level: !input critical_threshold
+  prefix: !input task_prefix
+  auto_remove: !input auto_remove_tasks
+  waste_sensor: !input waste_sensor
+  status_sensor: !input status_sensor
 
-# Triggers
 trigger:
-  # Percentage sensor changes
+  # Waste level changes
   - platform: state
-    entity_id: !input percent_sensors
-    id: percent_change
-    enabled: !input enable_percent_triggers
-    not_to:
-      - unknown
-      - unavailable
-    not_from:
-      - unknown
-      - unavailable
+    entity_id: !input waste_sensor
+    id: waste_change
+    for:
+      seconds: 5
   
   # Status code changes
   - platform: state
-    entity_id: !input status_code_sensors
+    entity_id: !input status_sensor
     id: status_change
-    enabled: !input enable_status_triggers
-    not_to:
-      - unknown
-      - unavailable
-    not_from:
-      - unknown
-      - unavailable
+    for:
+      seconds: 5
   
-  # Sensor becomes unavailable
-  - platform: state
-    entity_id: !input percent_sensors
-    to: unavailable
-    for: "00:05:00"
-    id: percent_error
-    enabled: !input enable_error_triggers
-  
-  - platform: state
-    entity_id: !input status_code_sensors
-    to: unavailable
-    for: "00:05:00"
-    id: status_error
-    enabled: !input enable_error_triggers
-  
-  # Daily cleanup at 3 AM
+  # Daily cleanup check at 3 AM
   - platform: time
     at: "03:00:00"
     id: daily_cleanup
-  
-  # Predictive maintenance check (every 6 hours)
-  - platform: time_pattern
-    hours: "/6"
-    id: predictive_check
-    enabled: !input enable_predictive_maintenance
 
-# Conditions
-condition:
-  # Ensure critical threshold is higher than warning
-  - condition: template
-    value_template: "{{ critical | int > threshold | int }}"
-  
-  # Ensure we have a valid to-do entity
-  - condition: template
-    value_template: "{{ todo is defined and todo != '' }}"
+condition: []
 
-# Actions
 action:
   - choose:
-      # Handle percentage-based triggers
+      # ============================================
+      # WASTE LEVEL MONITORING
+      # ============================================
       - conditions:
           - condition: trigger
-            id: percent_change
-          - condition: template
-            value_template: "{{ enable_percent }}"
+            id: waste_change
         sequence:
-          - repeat:
-              for_each: "{{ percent_sensors }}"
-              sequence:
-                - variables:
-                    sensor: "{{ repeat.item }}"
-                    value: "{{ states(sensor) | float(-1) }}"
-                    name: "{{ state_attr(sensor, 'friendly_name') or sensor.split('.')[-1] | replace('_', ' ') | title }}"
-                    
-                - choose:
-                    # Critical level
-                    - conditions:
-                        - condition: template
-                          value_template: "{{ value >= critical and value <= 100 }}"
+          # First get existing tasks to prevent duplicates
+          - service: todo.get_items
+            target:
+              entity_id: "{{ todo_list }}"
+            data:
+              status: needs_action
+            response_variable: current_tasks
+          
+          # Store task titles for checking
+          - variables:
+              existing_titles: >-
+                {{ current_tasks['items'] | map(attribute='summary') | list if 'items' in current_tasks else [] }}
+              waste_critical_title: "{{ prefix }} 🔴 Empty Waste Drawer NOW! ({{ waste_level }}% full)"
+              waste_warning_title: "{{ prefix }} 🟡 Empty Waste Drawer Soon ({{ waste_level }}% full)"
+              waste_ok_title: "{{ prefix }} ✅ Waste Level OK"
+          
+          - choose:
+              # CRITICAL: Waste level >= 90%
+              - conditions:
+                  - condition: template
+                    value_template: "{{ waste_level >= critical_level }}"
+                sequence:
+                  # Remove any warning task first
+                  - repeat:
+                      for_each: "{{ current_tasks.get('items', []) }}"
                       sequence:
-                        - service: script.turn_on
-                          target:
-                            entity_id: script.litter_robot_create_task
-                          data:
-                            variables:
-                              todo_entity: "{{ todo }}"
-                              task_title: "{{ task_prefix }}🔴 {{ name }} - Critical"
-                              task_desc: "{{ name }} is {{ value | round(0) }}% full. Immediate attention required!"
-                              priority: 2
-                              due_offset: 0
-                    
-                    # Warning level
-                    - conditions:
                         - condition: template
-                          value_template: "{{ value >= threshold and value < critical }}"
-                      sequence:
-                        - service: script.turn_on
+                          value_template: >-
+                            {{ prefix in repeat.item.summary and 
+                               ('Waste Drawer' in repeat.item.summary or 'Waste Level' in repeat.item.summary) and
+                               '🔴' not in repeat.item.summary }}
+                        - service: todo.remove_item
                           target:
-                            entity_id: script.litter_robot_create_task
+                            entity_id: "{{ todo_list }}"
                           data:
-                            variables:
-                              todo_entity: "{{ todo }}"
-                              task_title: "{{ task_prefix }}🟡 {{ name }} - Warning"
-                              task_desc: "{{ name }} is {{ value | round(0) }}% full. Service needed soon."
-                              priority: 1
-                              due_offset: 1
-                    
-                    # Back to normal - cleanup tasks
-                    - conditions:
+                            item: "{{ repeat.item.summary }}"
+                          continue_on_error: true
+                  
+                  # Add critical task if not exists
+                  - condition: template
+                    value_template: "{{ waste_critical_title not in existing_titles }}"
+                  - service: todo.add_item
+                    target:
+                      entity_id: "{{ todo_list }}"
+                    data:
+                      item: "{{ waste_critical_title }}"
+                      due_date: "{{ now().date() }}"
+              
+              # WARNING: Waste level between 75-89%
+              - conditions:
+                  - condition: template
+                    value_template: "{{ waste_level >= warning_level and waste_level < critical_level }}"
+                sequence:
+                  # Remove any critical task first
+                  - repeat:
+                      for_each: "{{ current_tasks.get('items', []) }}"
+                      sequence:
                         - condition: template
-                          value_template: "{{ value < threshold and value >= 0 }}"
-                      sequence:
-                        - service: script.turn_on
+                          value_template: >-
+                            {{ prefix in repeat.item.summary and 
+                               'Waste Drawer' in repeat.item.summary and
+                               '🔴' in repeat.item.summary }}
+                        - service: todo.remove_item
                           target:
-                            entity_id: script.litter_robot_cleanup_tasks
+                            entity_id: "{{ todo_list }}"
                           data:
-                            variables:
-                              todo_entity: "{{ todo }}"
-                              task_pattern: "{{ task_prefix }}[🔴🟡] {{ name }}"
+                            item: "{{ repeat.item.summary }}"
+                          continue_on_error: true
+                  
+                  # Add warning task if not exists
+                  - condition: template
+                    value_template: >-
+                      {% set has_warning = namespace(found=false) %}
+                      {% for item in existing_titles %}
+                        {% if prefix in item and 'Waste Drawer' in item and '🟡' in item %}
+                          {% set has_warning.found = true %}
+                        {% endif %}
+                      {% endfor %}
+                      {{ not has_warning.found }}
+                  - service: todo.add_item
+                    target:
+                      entity_id: "{{ todo_list }}"
+                    data:
+                      item: "{{ waste_warning_title }}"
+                      due_date: "{{ (now() + timedelta(days=1)).date() }}"
+              
+              # NORMAL: Waste level < 75% - Remove all waste tasks
+              - conditions:
+                  - condition: template
+                    value_template: "{{ waste_level < warning_level and auto_remove }}"
+                sequence:
+                  - repeat:
+                      for_each: "{{ current_tasks.get('items', []) }}"
+                      sequence:
+                        - condition: template
+                          value_template: >-
+                            {{ prefix in repeat.item.summary and 
+                               ('Waste Drawer' in repeat.item.summary or 'Waste Level' in repeat.item.summary) }}
+                        - service: todo.remove_item
+                          target:
+                            entity_id: "{{ todo_list }}"
+                          data:
+                            item: "{{ repeat.item.summary }}"
+                          continue_on_error: true
       
-      # Handle status code triggers
+      # ============================================
+      # STATUS CODE MONITORING
+      # ============================================
       - conditions:
           - condition: trigger
             id: status_change
-          - condition: template
-            value_template: "{{ enable_status }}"
         sequence:
-          - repeat:
-              for_each: "{{ status_sensors }}"
-              sequence:
-                - variables:
-                    sensor: "{{ repeat.item }}"
-                    code: "{{ states(sensor) }}"
-                    mapping: "{{ code_map.get(code, None) }}"
-                    
-                - condition: template
-                  value_template: "{{ mapping is not none }}"
-                  
-                - service: script.turn_on
-                  target:
-                    entity_id: script.litter_robot_create_task
-                  data:
-                    variables:
-                      todo_entity: "{{ todo }}"
-                      task_title: "{{ task_prefix }}{{ mapping[1] }} {{ mapping[0] }}"
-                      task_desc: "{{ mapping[2] }}"
-                      priority: "{{ mapping[3] | int(1) }}"
-                      due_offset: "{{ 0 if mapping[3] | int >= 2 else 1 }}"
-      
-      # Handle error conditions
-      - conditions:
-          - condition: or
-            conditions:
-              - condition: trigger
-                id: percent_error
-              - condition: trigger
-                id: status_error
-          - condition: template
-            value_template: "{{ enable_error }}"
-        sequence:
-          - variables:
-              sensor: "{{ trigger.entity_id }}"
-              name: "{{ state_attr(sensor, 'friendly_name') or sensor.split('.')[-1] | replace('_', ' ') | title }}"
-              
-          - service: script.turn_on
+          # Get current tasks
+          - service: todo.get_items
             target:
-              entity_id: script.litter_robot_create_task
+              entity_id: "{{ todo_list }}"
             data:
-              variables:
-                todo_entity: "{{ todo }}"
-                task_title: "{{ task_prefix }}⚠️ {{ name }} Offline"
-                task_desc: "{{ name }} has been unavailable for 5+ minutes. Check device connection."
-                priority: 2
-                due_offset: 0
+              status: needs_action
+            response_variable: current_tasks
           
-          # Send notification if enabled
-          - condition: template
-            value_template: "{{ enable_notify and notify_device != '' }}"
-          - service: notify.mobile_app_{{ device_attr(notify_device, 'name') | lower | replace(' ', '_') }}
-            data:
-              title: "Litter Robot Alert"
-              message: "{{ name }} is offline!"
-              data:
-                priority: high
-                ttl: 0
-                channel: litter_robot_alerts
+          - variables:
+              status_alerts:
+                df1: 
+                  title: "{{ prefix }} 🟡 Drawer Almost Full"
+                  priority: medium
+                  emoji: "🟡"
+                df2: 
+                  title: "{{ prefix }} 🔴 Drawer Full - Unit Stopped!"
+                  priority: high
+                  emoji: "🔴"
+                csf: 
+                  title: "{{ prefix }} ⚠️ Cat Sensor Fault"
+                  priority: medium
+                  emoji: "⚠️"
+                csi: 
+                  title: "{{ prefix }} ⚠️ Cat Sensor Interrupted"
+                  priority: low
+                  emoji: "⚠️"
+                br: 
+                  title: "{{ prefix }} ⚠️ Bonnet Removed"
+                  priority: medium
+                  emoji: "⚠️"
+                p: 
+                  title: "{{ prefix }} ⏸️ Unit Paused"
+                  priority: low
+                  emoji: "⏸️"
+                off: 
+                  title: "{{ prefix }} ⭕ Unit Offline"
+                  priority: medium
+                  emoji: "⭕"
+                pd:
+                  title: "{{ prefix }} 🔄 Pinch Detect"
+                  priority: medium
+                  emoji: "🔄"
+                ccc:
+                  title: "{{ prefix }} 🐈 Cat Inside - Waiting"
+                  priority: low
+                  emoji: "🐈"
+              
+              current_alert: "{{ status_alerts.get(current_status, {}) }}"
+              existing_titles: >-
+                {{ current_tasks['items'] | map(attribute='summary') | list if 'items' in current_tasks else [] }}
+          
+          - choose:
+              # Status requires attention
+              - conditions:
+                  - condition: template
+                    value_template: "{{ current_alert != {} }}"
+                sequence:
+                  # Remove old status tasks for this unit
+                  - repeat:
+                      for_each: "{{ current_tasks.get('items', []) }}"
+                      sequence:
+                        - condition: template
+                          value_template: >-
+                            {{ prefix in repeat.item.summary and 
+                               repeat.item.summary != current_alert.title and
+                               any(emoji in repeat.item.summary for emoji in ['⚠️', '🔴', '🟡', '⏸️', '⭕', '🔄', '🐈']) }}
+                        - service: todo.remove_item
+                          target:
+                            entity_id: "{{ todo_list }}"
+                          data:
+                            item: "{{ repeat.item.summary }}"
+                          continue_on_error: true
+                  
+                  # Add new status task if not exists
+                  - condition: template
+                    value_template: "{{ current_alert.title not in existing_titles }}"
+                  - service: todo.add_item
+                    target:
+                      entity_id: "{{ todo_list }}"
+                    data:
+                      item: "{{ current_alert.title }}"
+                      due_date: >-
+                        {% if current_alert.priority == 'high' %}
+                          {{ now().date() }}
+                        {% elif current_alert.priority == 'medium' %}
+                          {{ (now() + timedelta(days=1)).date() }}
+                        {% else %}
+                          {{ (now() + timedelta(days=2)).date() }}
+                        {% endif %}
+              
+              # Status is normal (rdy) - Remove all status tasks
+              - conditions:
+                  - condition: template
+                    value_template: "{{ current_status == 'rdy' and auto_remove }}"
+                sequence:
+                  - repeat:
+                      for_each: "{{ current_tasks.get('items', []) }}"
+                      sequence:
+                        - condition: template
+                          value_template: >-
+                            {{ prefix in repeat.item.summary and 
+                               any(emoji in repeat.item.summary for emoji in ['⚠️', '🔴', '🟡', '⏸️', '⭕', '🔄', '🐈']) and
+                               'Waste Drawer' not in repeat.item.summary }}
+                        - service: todo.remove_item
+                          target:
+                            entity_id: "{{ todo_list }}"
+                          data:
+                            item: "{{ repeat.item.summary }}"
+                          continue_on_error: true
       
-      # Daily cleanup
+      # ============================================
+      # DAILY CLEANUP - Remove old/completed tasks
+      # ============================================
       - conditions:
           - condition: trigger
             id: daily_cleanup
         sequence:
+          # Get all tasks
           - service: todo.get_items
             target:
-              entity_id: "{{ todo }}"
+              entity_id: "{{ todo_list }}"
             data:
-              status: completed
-            response_variable: completed_items
-            
+              status: needs_action
+            response_variable: all_tasks
+          
+          # Remove tasks older than 7 days
           - repeat:
-              for_each: "{{ completed_items['items'] | default([]) }}"
+              for_each: "{{ all_tasks.get('items', []) }}"
               sequence:
                 - condition: template
-                  value_template: >
-                    {{ task_prefix in repeat.item.summary and 
-                       (now() - repeat.item.completed | as_datetime).days > 7 }}
+                  value_template: >-
+                    {% if prefix not in repeat.item.summary %}
+                      false
+                    {% elif repeat.item.get('due') is none %}
+                      false
+                    {% else %}
+                      {% set due_date = (repeat.item.due ~ ' 00:00:00') | as_datetime %}
+                      {% set days_old = (now() - due_date).days %}
+                      {{ days_old > 7 }}
+                    {% endif %}
                 - service: todo.remove_item
                   target:
-                    entity_id: "{{ todo }}"
+                    entity_id: "{{ todo_list }}"
                   data:
-                    item: "{{ repeat.item.uid }}"
-      
-      # Predictive maintenance
-      - conditions:
-          - condition: trigger
-            id: predictive_check
-          - condition: template
-            value_template: "{{ enable_predictive }}"
-        sequence:
-          - service: script.turn_on
-            target:
-              entity_id: script.litter_robot_predictive_maintenance
-            data:
-              variables:
-                todo_entity: "{{ todo }}"
-                sensors: "{{ all_sensors }}"
-                task_prefix: "{{ task_prefix }}"
-
-# Required Helper Scripts (create these in your configuration)
-script:
-  litter_robot_create_task:
-    alias: "Litter Robot - Create Task with Retry"
-    mode: parallel
-    max: 10
-    fields:
-      todo_entity:
-        description: "To-do list entity"
-        required: true
-      task_title:
-        description: "Task title"
-        required: true
-      task_desc:
-        description: "Task description"
-        required: true
-      priority:
-        description: "Priority level (0-2)"
-        required: true
-      due_offset:
-        description: "Days from today"
-        required: true
-    sequence:
-      - repeat:
-          count: "{{ max_retries | default(3) }}"
-          sequence:
-            - service: todo.get_items
-              target:
-                entity_id: "{{ todo_entity }}"
-              response_variable: existing_tasks
-              continue_on_error: true
-              
-            - condition: template
-              value_template: >
-                {{ existing_tasks is defined and 
-                   task_title not in (existing_tasks.get('items', []) | 
-                   map(attribute='summary') | list) }}
-                   
-            - service: todo.add_item
-              target:
-                entity_id: "{{ todo_entity }}"
-              data:
-                item: "{{ task_title }}"
-                description: "{{ task_desc }}"
-                due_date: >
-                  {{ (now() + timedelta(days=due_offset)).strftime('%Y-%m-%d') }}
-              continue_on_error: true
-              
-            - stop: "Task created successfully"
-            
-            - delay:
-                seconds: "{{ retry_delay | default(2) }}"
-  
-  litter_robot_cleanup_tasks:
-    alias: "Litter Robot - Cleanup Resolved Tasks"
-    mode: parallel
-    max: 10
-    fields:
-      todo_entity:
-        description: "To-do list entity"
-        required: true
-      task_pattern:
-        description: "Task title pattern to match"
-        required: true
-    sequence:
-      - service: todo.get_items
-        target:
-          entity_id: "{{ todo_entity }}"
-        data:
-          status: needs_action
-        response_variable: active_tasks
-        continue_on_error: true
-        
-      - repeat:
-          for_each: "{{ active_tasks.get('items', []) }}"
-          sequence:
-            - condition: template
-              value_template: >
-                {{ task_pattern in repeat.item.summary }}
-                
-            - service: todo.update_item
-              target:
-                entity_id: "{{ todo_entity }}"
-              data:
-                item: "{{ repeat.item.summary }}"
-                status: completed
-              continue_on_error: true
-  
-  litter_robot_predictive_maintenance:
-    alias: "Litter Robot - Predictive Maintenance Analysis"
-    mode: single
-    fields:
-      todo_entity:
-        description: "To-do list entity"
-        required: true
-      sensors:
-        description: "List of sensors to analyze"
-        required: true
-      task_prefix:
-        description: "Task prefix"
-        required: true
-    sequence:
-      # Placeholder for predictive maintenance logic
-      # This would analyze sensor history and create proactive tasks
-      - service: logbook.log
-        data:
-          name: "Litter Robot"
-          message: "Predictive maintenance check completed"
+                    item: "{{ repeat.item.summary }}"
+                  continue_on_error: true
