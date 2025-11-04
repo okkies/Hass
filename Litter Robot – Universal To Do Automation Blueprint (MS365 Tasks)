@@ -1,149 +1,402 @@
 blueprint:
-  name: Polly Poeptroon Manager
-  description: Beheert taken voor Polly's kattenbak - maakt ze aan en ruimt ze op
+  name: Litter Robot Ultimate Manager - FIXED
+  description: |
+    Volledig werkende Litter Robot automation voor Polly.
+    ✅ Werkt met Todoist EN lokale todo lijsten
+    ✅ Gebruikt de JUISTE services (todo.update_item voor Todoist)
+    ✅ Maakt taken aan en markeert ze als completed wanneer opgelost
+    ✅ Monitort waste drawer, litter hopper en status
   domain: automation
   input:
-    waste_drawer_sensor:
+    waste_sensor:
       name: Waste Drawer Sensor
-      description: De poeplade sensor
+      description: Poeplade niveau sensor
       selector:
         entity:
-          filter:
-            domain: sensor
+          domain: sensor
       default: sensor.pollies_poeptroon_waste_drawer
     
-    litter_level_sensor:
-      name: Litter Level Sensor  
-      description: De korrels hopper sensor
+    litter_sensor:
+      name: Litter Level Sensor
+      description: Korrels hopper niveau sensor
       selector:
         entity:
-          filter:
-            domain: sensor
+          domain: sensor
       default: sensor.pollies_poeptroon_litter_level
     
-    target_todo_list:
-      name: Todo Lijst
-      description: Welke todo lijst gebruiken (Shopping List of Inbox)
+    status_sensor:
+      name: Status Code Sensor
+      description: Status code sensor
       selector:
         entity:
-          filter:
-            domain: todo
+          domain: sensor
+      default: sensor.pollies_poeptroon_status_code
+    
+    todo_list:
+      name: Todo List
+      description: Todoist lijst (todo.inbox) of lokale lijst (todo.shopping_list)
+      selector:
+        entity:
+          domain: todo
       default: todo.inbox
-
-trigger:
-  - platform: numeric_state
-    entity_id: !input waste_drawer_sensor
-    above: 85
-    id: waste_high
-  
-  - platform: numeric_state
-    entity_id: !input waste_drawer_sensor
-    above: 70
-    below: 85
-    id: waste_warning
-  
-  - platform: numeric_state
-    entity_id: !input waste_drawer_sensor
-    below: 65
-    id: waste_normal
-  
-  - platform: numeric_state
-    entity_id: !input litter_level_sensor
-    below: 20
-    id: litter_critical
-  
-  - platform: numeric_state
-    entity_id: !input litter_level_sensor
-    below: 35
-    above: 20
-    id: litter_warning
-  
-  - platform: numeric_state
-    entity_id: !input litter_level_sensor
-    above: 40
-    id: litter_normal
-
-condition: []
-
-action:
-  - choose:
-      # WASTE HIGH
-      - conditions:
-          - condition: trigger
-            id: waste_high
-        sequence:
-          - service: todo.add_item
-            data:
-              item: "🔴 URGENT: Polly's poeplade legen! ({{ trigger.to_state.state }}% vol)"
-              due_date: "{{ now().date() }}"
-            target:
-              entity_id: !input target_todo_list
-          
-          - service: persistent_notification.create
-            data:
-              title: "Polly's Poeplade Vol!"
-              message: "De poeplade is {{ trigger.to_state.state }}% vol. Direct legen!"
-              notification_id: polly_waste_critical
-      
-      # WASTE WARNING
-      - conditions:
-          - condition: trigger
-            id: waste_warning
-        sequence:
-          - service: todo.add_item
-            data:
-              item: "🟡 Polly's poeplade bijna vol ({{ trigger.to_state.state }}%)"
-              due_date: "{{ (now() + timedelta(days=1)).date() }}"
-            target:
-              entity_id: !input target_todo_list
-      
-      # WASTE NORMAL - Clean up tasks
-      - conditions:
-          - condition: trigger
-            id: waste_normal
-        sequence:
-          - service: persistent_notification.dismiss
-            data:
-              notification_id: polly_waste_critical
-      
-      # LITTER CRITICAL
-      - conditions:
-          - condition: trigger
-            id: litter_critical
-        sequence:
-          - service: todo.add_item
-            data:
-              item: "🔴 Kattenbakvulling BIJNA OP! ({{ trigger.to_state.state }}%)"
-              due_date: "{{ now().date() }}"
-            target:
-              entity_id: !input target_todo_list
-          
-          - service: persistent_notification.create
-            data:
-              title: "Korrels Bijna Op!"
-              message: "Nog maar {{ trigger.to_state.state }}% korrels. Nieuwe zak kopen!"
-              notification_id: polly_litter_critical
-      
-      # LITTER WARNING
-      - conditions:
-          - condition: trigger
-            id: litter_warning
-        sequence:
-          - service: todo.add_item
-            data:
-              item: "⚠️ Korrels worden minder ({{ trigger.to_state.state }}%)"
-              due_date: "{{ (now() + timedelta(days=3)).date() }}"
-            target:
-              entity_id: !input target_todo_list
-      
-      # LITTER NORMAL
-      - conditions:
-          - condition: trigger
-            id: litter_normal
-        sequence:
-          - service: persistent_notification.dismiss
-            data:
-              notification_id: polly_litter_critical
+    
+    use_todoist:
+      name: Use Todoist
+      description: ON voor Todoist (update_item), OFF voor lokale lijst (delete_item)
+      selector:
+        boolean:
+      default: true
+    
+    waste_warning:
+      name: Waste Warning Level (%)
+      default: 70
+      selector:
+        number:
+          min: 50
+          max: 89
+          step: 5
+          unit_of_measurement: "%"
+    
+    waste_critical:
+      name: Waste Critical Level (%)
+      default: 85
+      selector:
+        number:
+          min: 60
+          max: 100
+          step: 5
+          unit_of_measurement: "%"
+    
+    litter_warning:
+      name: Litter Warning Level (%)
+      default: 30
+      selector:
+        number:
+          min: 10
+          max: 50
+          step: 5
+          unit_of_measurement: "%"
+    
+    litter_critical:
+      name: Litter Critical Level (%)
+      default: 15
+      selector:
+        number:
+          min: 5
+          max: 30
+          step: 5
+          unit_of_measurement: "%"
 
 mode: single
 max_exceeded: silent
+
+variables:
+  waste_sensor: !input waste_sensor
+  litter_sensor: !input litter_sensor
+  status_sensor: !input status_sensor
+  todo_list: !input todo_list
+  is_todoist: !input use_todoist
+  waste_warn: !input waste_warning
+  waste_crit: !input waste_critical
+  litter_warn: !input litter_warning
+  litter_crit: !input litter_critical
+
+trigger:
+  # Waste level triggers
+  - platform: state
+    entity_id: !input waste_sensor
+    id: waste_changed
+    for:
+      seconds: 5
+  
+  # Litter level triggers
+  - platform: state
+    entity_id: !input litter_sensor
+    id: litter_changed
+    for:
+      seconds: 5
+  
+  # Status triggers
+  - platform: state
+    entity_id: !input status_sensor
+    id: status_changed
+    for:
+      seconds: 3
+
+action:
+  # Get current values
+  - variables:
+      waste_level: "{{ states(waste_sensor) | int(0) }}"
+      litter_level: "{{ states(litter_sensor) | int(0) }}"
+      current_status: "{{ states(status_sensor) }}"
+  
+  # Get existing tasks
+  - service: todo.get_items
+    target:
+      entity_id: "{{ todo_list }}"
+    data:
+      status: needs_action
+    response_variable: active_tasks
+  
+  # WASTE MANAGEMENT
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: waste_changed
+        sequence:
+          # Mark old waste tasks as completed (for Todoist) or delete them (for local)
+          - repeat:
+              for_each: "{{ active_tasks.get('items', []) }}"
+              sequence:
+                - choose:
+                    # If it's a waste-related task
+                    - conditions:
+                        - condition: template
+                          value_template: >
+                            {{ 'Poeplade' in repeat.item.summary or 
+                               'poeplade' in repeat.item.summary or
+                               'Waste' in repeat.item.summary }}
+                      sequence:
+                        - choose:
+                            # For Todoist - mark as completed
+                            - conditions:
+                                - condition: template
+                                  value_template: "{{ is_todoist }}"
+                              sequence:
+                                - service: todo.update_item
+                                  target:
+                                    entity_id: "{{ todo_list }}"
+                                  data:
+                                    item: "{{ repeat.item.summary }}"
+                                    status: "completed"
+                                  continue_on_error: true
+                            
+                            # For local lists - delete the item
+                            - conditions:
+                                - condition: template
+                                  value_template: "{{ not is_todoist }}"
+                              sequence:
+                                - service: todo.delete_item
+                                  target:
+                                    entity_id: "{{ todo_list }}"
+                                  data:
+                                    uid: "{{ repeat.item.uid }}"
+                                  continue_on_error: true
+          
+          # Add new task based on current level
+          - choose:
+              # CRITICAL
+              - conditions:
+                  - condition: template
+                    value_template: "{{ waste_level >= waste_crit }}"
+                sequence:
+                  - service: todo.add_item
+                    target:
+                      entity_id: "{{ todo_list }}"
+                    data:
+                      item: "🔴 Polly's poeplade VOL - URGENT! ({{ waste_level }}%)"
+                      due_date: "{{ now().date() }}"
+                      description: |
+                        De poeplade is {{ waste_level }}% vol!
+                        Status: {{ current_status }}
+                        Litter: {{ litter_level }}%
+                        
+                        Polly kan straks niet meer poepen!
+              
+              # WARNING
+              - conditions:
+                  - condition: template
+                    value_template: "{{ waste_level >= waste_warn and waste_level < waste_crit }}"
+                sequence:
+                  - service: todo.add_item
+                    target:
+                      entity_id: "{{ todo_list }}"
+                    data:
+                      item: "🟡 Polly's poeplade bijna vol ({{ waste_level }}%)"
+                      due_date: "{{ (now() + timedelta(days=1)).date() }}"
+  
+  # LITTER MANAGEMENT
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: litter_changed
+        sequence:
+          # Clean up old litter tasks
+          - repeat:
+              for_each: "{{ active_tasks.get('items', []) }}"
+              sequence:
+                - choose:
+                    - conditions:
+                        - condition: template
+                          value_template: >
+                            {{ 'Korrels' in repeat.item.summary or 
+                               'korrels' in repeat.item.summary or
+                               'Litter' in repeat.item.summary or
+                               'Kattenbakvulling' in repeat.item.summary }}
+                      sequence:
+                        - choose:
+                            # Todoist
+                            - conditions:
+                                - condition: template
+                                  value_template: "{{ is_todoist }}"
+                              sequence:
+                                - service: todo.update_item
+                                  target:
+                                    entity_id: "{{ todo_list }}"
+                                  data:
+                                    item: "{{ repeat.item.summary }}"
+                                    status: "completed"
+                                  continue_on_error: true
+                            
+                            # Local
+                            - conditions:
+                                - condition: template
+                                  value_template: "{{ not is_todoist }}"
+                              sequence:
+                                - service: todo.delete_item
+                                  target:
+                                    entity_id: "{{ todo_list }}"
+                                  data:
+                                    uid: "{{ repeat.item.uid }}"
+                                  continue_on_error: true
+          
+          # Add new litter task if needed
+          - choose:
+              # CRITICAL
+              - conditions:
+                  - condition: template
+                    value_template: "{{ litter_level <= litter_crit }}"
+                sequence:
+                  - service: todo.add_item
+                    target:
+                      entity_id: "{{ todo_list }}"
+                    data:
+                      item: "🔴 Kattenbakvulling BIJNA OP! ({{ litter_level }}%)"
+                      due_date: "{{ now().date() }}"
+                      description: |
+                        Hopper heeft nog maar {{ litter_level }}% korrels!
+                        Nieuwe zak kopen VANDAAG!
+              
+              # WARNING
+              - conditions:
+                  - condition: template
+                    value_template: "{{ litter_level <= litter_warn and litter_level > litter_crit }}"
+                sequence:
+                  - service: todo.add_item
+                    target:
+                      entity_id: "{{ todo_list }}"
+                    data:
+                      item: "🟡 Korrels worden minder ({{ litter_level }}%)"
+                      due_date: "{{ (now() + timedelta(days=3)).date() }}"
+  
+  # STATUS MANAGEMENT
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: status_changed
+        sequence:
+          # Clean up old status tasks
+          - repeat:
+              for_each: "{{ active_tasks.get('items', []) }}"
+              sequence:
+                - choose:
+                    - conditions:
+                        - condition: template
+                          value_template: >
+                            {{ 'Status:' in repeat.item.summary or 
+                               '⚠️' in repeat.item.summary or
+                               '🔧' in repeat.item.summary }}
+                      sequence:
+                        - choose:
+                            # Todoist
+                            - conditions:
+                                - condition: template
+                                  value_template: "{{ is_todoist }}"
+                              sequence:
+                                - service: todo.update_item
+                                  target:
+                                    entity_id: "{{ todo_list }}"
+                                  data:
+                                    item: "{{ repeat.item.summary }}"
+                                    status: "completed"
+                                  continue_on_error: true
+                            
+                            # Local
+                            - conditions:
+                                - condition: template
+                                  value_template: "{{ not is_todoist }}"
+                              sequence:
+                                - service: todo.delete_item
+                                  target:
+                                    entity_id: "{{ todo_list }}"
+                                  data:
+                                    uid: "{{ repeat.item.uid }}"
+                                  continue_on_error: true
+          
+          # Add status task if needed
+          - choose:
+              # Everything OK
+              - conditions:
+                  - condition: template
+                    value_template: "{{ current_status in ['rdy', 'ccc', 'ccp'] }}"
+                sequence: []
+              
+              # Drawer Full
+              - conditions:
+                  - condition: template
+                    value_template: "{{ current_status == 'df2' }}"
+                sequence:
+                  - service: todo.add_item
+                    target:
+                      entity_id: "{{ todo_list }}"
+                    data:
+                      item: "🔴 Status: Drawer FULL - Unit gestopt!"
+                      due_date: "{{ now().date() }}"
+              
+              # Drawer Almost Full
+              - conditions:
+                  - condition: template
+                    value_template: "{{ current_status == 'df1' }}"
+                sequence:
+                  - service: todo.add_item
+                    target:
+                      entity_id: "{{ todo_list }}"
+                    data:
+                      item: "🟡 Status: Drawer bijna vol"
+                      due_date: "{{ (now() + timedelta(days=1)).date() }}"
+              
+              # Sensor Issues
+              - conditions:
+                  - condition: template
+                    value_template: "{{ current_status in ['csf', 'csi', 'cst'] }}"
+                sequence:
+                  - service: todo.add_item
+                    target:
+                      entity_id: "{{ todo_list }}"
+                    data:
+                      item: "⚠️ Status: Sensor probleem ({{ current_status }})"
+                      due_date: "{{ now().date() }}"
+              
+              # Bonnet Removed
+              - conditions:
+                  - condition: template
+                    value_template: "{{ current_status == 'br' }}"
+                sequence:
+                  - service: todo.add_item
+                    target:
+                      entity_id: "{{ todo_list }}"
+                    data:
+                      item: "🔧 Status: Deksel eraf!"
+                      due_date: "{{ now().date() }}"
+              
+              # Unit Off
+              - conditions:
+                  - condition: template
+                    value_template: "{{ current_status == 'off' }}"
+                sequence:
+                  - service: todo.add_item
+                    target:
+                      entity_id: "{{ todo_list }}"
+                    data:
+                      item: "⭕ Status: Unit staat UIT"
+                      due_date: "{{ (now() + timedelta(days=1)).date() }}"
