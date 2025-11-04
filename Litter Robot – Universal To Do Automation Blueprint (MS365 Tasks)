@@ -1,21 +1,22 @@
 blueprint:
-  name: Litter Robot Task Manager (Simple)
+  name: Litter Robot Task Manager - Fixed
   description: |
-    Manages Litter Robot maintenance tasks - creates when needed, removes when fixed.
-    Compatible with Home Assistant local todo lists.
+    Automatically manages Litter Robot maintenance tasks.
+    Creates tasks when issues occur, removes them when resolved.
+    100% compatible with Home Assistant's local todo lists.
   domain: automation
   input:
     waste_sensor:
       name: Waste Drawer Sensor
-      description: Your Litter Robot waste drawer level sensor
+      description: Select your Litter Robot waste drawer sensor
       selector:
         entity:
           domain: sensor
       default: sensor.pollies_poeptroon_waste_drawer
     
     status_sensor:
-      name: Status Code Sensor
-      description: Your Litter Robot status code sensor
+      name: Status Code Sensor  
+      description: Select your Litter Robot status code sensor
       selector:
         entity:
           domain: sensor
@@ -23,15 +24,15 @@ blueprint:
     
     todo_entity:
       name: To-Do List
-      description: Select a LOCAL todo list (NOT Todoist - it's read-only!)
+      description: Select a LOCAL todo list (Shopping List or custom). Todoist won't work!
       selector:
         entity:
           domain: todo
       default: todo.shopping_list
     
     warning_threshold:
-      name: Warning Level (%)
-      description: Warning when waste drawer reaches this
+      name: Warning Threshold (%)
+      description: Create warning task at this waste level
       default: 75
       selector:
         number:
@@ -41,8 +42,8 @@ blueprint:
           unit_of_measurement: "%"
     
     critical_threshold:
-      name: Critical Level (%)
-      description: Critical when waste drawer reaches this
+      name: Critical Threshold (%)
+      description: Create critical task at this waste level
       default: 90
       selector:
         number:
@@ -54,6 +55,19 @@ blueprint:
 mode: single
 max_exceeded: silent
 
+trigger:
+  - platform: state
+    entity_id: !input waste_sensor
+    id: waste_level_changed
+    for:
+      seconds: 3
+  
+  - platform: state
+    entity_id: !input status_sensor
+    id: status_changed
+    for:
+      seconds: 3
+
 variables:
   waste_sensor: !input waste_sensor
   status_sensor: !input status_sensor
@@ -61,102 +75,105 @@ variables:
   warning_level: !input warning_threshold
   critical_level: !input critical_threshold
 
-trigger:
-  - platform: state
-    entity_id: !input waste_sensor
-    id: waste_changed
-  
-  - platform: state
-    entity_id: !input status_sensor
-    id: status_changed
-
 action:
-  # Get current waste level and status
+  # Get sensor values
   - variables:
       waste_percent: "{{ states(waste_sensor) | int(0) }}"
       current_status: "{{ states(status_sensor) }}"
+      task_prefix: "[LR]"
   
-  # Get existing tasks to check/remove
+  # Get existing todo items
   - service: todo.get_items
     target:
       entity_id: "{{ todo_list }}"
     data:
       status: needs_action
-    response_variable: existing_tasks
+    response_variable: current_tasks
   
-  # Process waste level changes
-  - if:
-      - condition: trigger
-        id: waste_changed
-    then:
-      # Remove old waste tasks first
-      - repeat:
-          for_each: "{{ existing_tasks.get('items', []) }}"
-          sequence:
-            - if:
-                - condition: template
-                  value_template: "{{ '[LR]' in repeat.item.summary and 'Waste' in repeat.item.summary }}"
-              then:
-                - service: todo.remove_item
-                  target:
-                    entity_id: "{{ todo_list }}"
-                  data:
-                    item: "{{ repeat.item.summary }}"
-                  continue_on_error: true
-      
-      # Add appropriate new task based on level
-      - choose:
-          # Critical level
-          - conditions:
-              - condition: template
-                value_template: "{{ waste_percent >= critical_level }}"
-            sequence:
-              - service: todo.add_item
-                target:
-                  entity_id: "{{ todo_list }}"
-                data:
-                  item: "[LR] 🔴 Empty Waste Drawer - CRITICAL ({{ waste_percent }}%)"
-                  due_date: "{{ now().date() }}"
+  # HANDLE WASTE LEVEL CHANGES
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: waste_level_changed
+        sequence:
+          # First remove ALL old waste-related tasks
+          - repeat:
+              for_each: "{{ current_tasks.get('items', []) }}"
+              sequence:
+                - choose:
+                    - conditions:
+                        - condition: template
+                          value_template: >
+                            {{ task_prefix in repeat.item.summary and 
+                               ('Waste' in repeat.item.summary or 'Empty' in repeat.item.summary) }}
+                      sequence:
+                        - service: todo.remove_item
+                          target:
+                            entity_id: "{{ todo_list }}"
+                          data:
+                            item: "{{ repeat.item.summary }}"
+                          continue_on_error: true
           
-          # Warning level
-          - conditions:
-              - condition: template
-                value_template: "{{ waste_percent >= warning_level and waste_percent < critical_level }}"
-            sequence:
-              - service: todo.add_item
-                target:
-                  entity_id: "{{ todo_list }}"
-                data:
-                  item: "[LR] 🟡 Empty Waste Drawer - Warning ({{ waste_percent }}%)"
-                  due_date: "{{ (now() + timedelta(days=1)).date() }}"
-  
-  # Process status changes
-  - if:
-      - condition: trigger
-        id: status_changed
-    then:
-      # Remove old status tasks
-      - repeat:
-          for_each: "{{ existing_tasks.get('items', []) }}"
-          sequence:
-            - if:
-                - condition: template
-                  value_template: "{{ '[LR]' in repeat.item.summary and 'Status' in repeat.item.summary }}"
-              then:
-                - service: todo.remove_item
-                  target:
-                    entity_id: "{{ todo_list }}"
-                  data:
-                    item: "{{ repeat.item.summary }}"
-                  continue_on_error: true
-      
-      # Add task for problem statuses
-      - if:
-          - condition: template
-            value_template: "{{ current_status not in ['rdy', 'ccc', 'ccp'] }}"
-        then:
+          # Then add the appropriate new task based on level
           - choose:
-              # Drawer full statuses
+              # CRITICAL LEVEL (90%+)
+              - conditions:
+                  - condition: template
+                    value_template: "{{ waste_percent >= critical_level }}"
+                sequence:
+                  - service: todo.add_item
+                    target:
+                      entity_id: "{{ todo_list }}"
+                    data:
+                      item: "{{ task_prefix }} 🔴 Empty Waste Drawer NOW! ({{ waste_percent }}% full)"
+                      due_date: "{{ now().date() }}"
+              
+              # WARNING LEVEL (75-89%)
+              - conditions:
+                  - condition: template
+                    value_template: "{{ waste_percent >= warning_level and waste_percent < critical_level }}"
+                sequence:
+                  - service: todo.add_item
+                    target:
+                      entity_id: "{{ todo_list }}"
+                    data:
+                      item: "{{ task_prefix }} 🟡 Empty Waste Drawer Soon ({{ waste_percent }}% full)"
+                      due_date: "{{ (now() + timedelta(days=1)).date() }}"
+              
+              # NORMAL LEVEL (<75%) - No action needed, tasks already removed
+      
+      # HANDLE STATUS CHANGES
+      - conditions:
+          - condition: trigger
+            id: status_changed
+        sequence:
+          # First remove ALL old status tasks
+          - repeat:
+              for_each: "{{ current_tasks.get('items', []) }}"
+              sequence:
+                - choose:
+                    - conditions:
+                        - condition: template
+                          value_template: >
+                            {{ task_prefix in repeat.item.summary and 
+                               'Status:' in repeat.item.summary }}
+                      sequence:
+                        - service: todo.remove_item
+                          target:
+                            entity_id: "{{ todo_list }}"
+                          data:
+                            item: "{{ repeat.item.summary }}"
+                          continue_on_error: true
+          
+          # Then add task if status indicates a problem
+          - choose:
+              # Ready status - no task needed
+              - conditions:
+                  - condition: template
+                    value_template: "{{ current_status in ['rdy', 'ccc', 'ccp', 'cd'] }}"
+                sequence: []
+              
+              # Drawer Full
               - conditions:
                   - condition: template
                     value_template: "{{ current_status == 'df2' }}"
@@ -165,9 +182,10 @@ action:
                     target:
                       entity_id: "{{ todo_list }}"
                     data:
-                      item: "[LR] 🔴 Status: Drawer Full - Unit Stopped!"
+                      item: "{{ task_prefix }} 🔴 Status: Drawer Full - Unit Stopped"
                       due_date: "{{ now().date() }}"
               
+              # Drawer Almost Full
               - conditions:
                   - condition: template
                     value_template: "{{ current_status == 'df1' }}"
@@ -176,22 +194,22 @@ action:
                     target:
                       entity_id: "{{ todo_list }}"
                     data:
-                      item: "[LR] 🟡 Status: Drawer Almost Full"
+                      item: "{{ task_prefix }} 🟡 Status: Drawer Almost Full"
                       due_date: "{{ (now() + timedelta(days=1)).date() }}"
               
-              # Sensor issues
+              # Cat Sensor Issues
               - conditions:
                   - condition: template
-                    value_template: "{{ current_status in ['csf', 'csi'] }}"
+                    value_template: "{{ current_status in ['csf', 'csi', 'cst'] }}"
                 sequence:
                   - service: todo.add_item
                     target:
                       entity_id: "{{ todo_list }}"
                     data:
-                      item: "[LR] ⚠️ Status: Cat Sensor Issue"
+                      item: "{{ task_prefix }} ⚠️ Status: Cat Sensor Issue ({{ current_status }})"
                       due_date: "{{ (now() + timedelta(days=1)).date() }}"
               
-              # Other issues
+              # Bonnet Removed
               - conditions:
                   - condition: template
                     value_template: "{{ current_status == 'br' }}"
@@ -200,9 +218,10 @@ action:
                     target:
                       entity_id: "{{ todo_list }}"
                     data:
-                      item: "[LR] ⚠️ Status: Bonnet Removed"
+                      item: "{{ task_prefix }} ⚠️ Status: Bonnet Removed"
                       due_date: "{{ now().date() }}"
               
+              # Unit Off
               - conditions:
                   - condition: template
                     value_template: "{{ current_status == 'off' }}"
@@ -211,9 +230,10 @@ action:
                     target:
                       entity_id: "{{ todo_list }}"
                     data:
-                      item: "[LR] ⭕ Status: Unit is Off"
+                      item: "{{ task_prefix }} ⭕ Status: Unit is Off"
                       due_date: "{{ (now() + timedelta(days=1)).date() }}"
               
+              # Unit Paused
               - conditions:
                   - condition: template
                     value_template: "{{ current_status == 'p' }}"
@@ -222,5 +242,29 @@ action:
                     target:
                       entity_id: "{{ todo_list }}"
                     data:
-                      item: "[LR] ⏸️ Status: Unit Paused"
+                      item: "{{ task_prefix }} ⏸️ Status: Unit Paused"
                       due_date: "{{ (now() + timedelta(days=2)).date() }}"
+              
+              # Pinch Detect
+              - conditions:
+                  - condition: template
+                    value_template: "{{ current_status == 'pd' }}"
+                sequence:
+                  - service: todo.add_item
+                    target:
+                      entity_id: "{{ todo_list }}"
+                    data:
+                      item: "{{ task_prefix }} 🔄 Status: Pinch Detect"
+                      due_date: "{{ (now() + timedelta(days=1)).date() }}"
+              
+              # Other error states
+              - conditions:
+                  - condition: template
+                    value_template: "{{ current_status not in ['rdy', 'ccc', 'ccp', 'cd', 'df1', 'df2', 'csf', 'csi', 'cst', 'br', 'off', 'p', 'pd'] }}"
+                sequence:
+                  - service: todo.add_item
+                    target:
+                      entity_id: "{{ todo_list }}"
+                    data:
+                      item: "{{ task_prefix }} ❓ Status: {{ current_status }}"
+                      due_date: "{{ (now() + timedelta(days=1)).date() }}"
