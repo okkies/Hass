@@ -154,9 +154,12 @@ action:
               - periodic_check
               - morning_check
         sequence:
-          # Trigger alle checks door de trigger_id te zetten
+          # Trigger alle checks door de check_all variabele te zetten
           - variables:
               check_all: true
+    default: 
+      - variables:
+          check_all: false
   
   # WASTE MANAGEMENT
   - choose:
@@ -166,7 +169,7 @@ action:
               - condition: trigger
                 id: waste_changed
               - condition: template
-                value_template: "{{ check_all | default(false) }}"
+                value_template: "{{ check_all }}"
         sequence:
           # Get current tasks
           - service: todo.get_items
@@ -201,15 +204,14 @@ action:
                                     item: "{{ repeat.item.summary }}"
                                     status: "completed"
                                   continue_on_error: true
-                            
+                          default:
                             # Local list - remove item
-                            default:
-                              - service: todo.remove_item
-                                target:
-                                  entity_id: "{{ todo_list }}"
-                                data:
-                                  item: "{{ repeat.item.summary }}"
-                                continue_on_error: true
+                            - service: todo.remove_item
+                              target:
+                                entity_id: "{{ todo_list }}"
+                              data:
+                                item: "{{ repeat.item.summary }}"
+                              continue_on_error: true
           
           # Add new waste task if needed
           - choose:
@@ -251,7 +253,7 @@ action:
               - condition: trigger
                 id: litter_changed
               - condition: template
-                value_template: "{{ check_all | default(false) }}"
+                value_template: "{{ check_all }}"
         sequence:
           # Get current tasks
           - service: todo.get_items
@@ -287,15 +289,14 @@ action:
                                     item: "{{ repeat.item.summary }}"
                                     status: "completed"
                                   continue_on_error: true
-                            
+                          default:
                             # Local
-                            default:
-                              - service: todo.remove_item
-                                target:
-                                  entity_id: "{{ todo_list }}"
-                                data:
-                                  item: "{{ repeat.item.summary }}"
-                                continue_on_error: true
+                            - service: todo.remove_item
+                              target:
+                                entity_id: "{{ todo_list }}"
+                              data:
+                                item: "{{ repeat.item.summary }}"
+                              continue_on_error: true
           
           # Add new litter task if needed
           - choose:
@@ -334,7 +335,7 @@ action:
               - condition: trigger
                 id: status_changed
               - condition: template
-                value_template: "{{ check_all | default(false) }}"
+                value_template: "{{ check_all }}"
         sequence:
           # Get current tasks
           - service: todo.get_items
@@ -373,15 +374,14 @@ action:
                                     item: "{{ repeat.item.summary }}"
                                     status: "completed"
                                   continue_on_error: true
-                            
+                          default:
                             # Local
-                            default:
-                              - service: todo.remove_item
-                                target:
-                                  entity_id: "{{ todo_list }}"
-                                data:
-                                  item: "{{ repeat.item.summary }}"
-                                continue_on_error: true
+                            - service: todo.remove_item
+                              target:
+                                entity_id: "{{ todo_list }}"
+                              data:
+                                item: "{{ repeat.item.summary }}"
+                              continue_on_error: true
           
           # Add status task if needed
           - choose:
