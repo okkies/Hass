@@ -15,7 +15,7 @@ blueprint:
         entity:
           domain: sensor
       default: sensor.pollies_poeptroon_waste_drawer
-    
+
     litter_sensor:
       name: Litter Level Sensor
       description: Korrels hopper niveau sensor
@@ -23,7 +23,7 @@ blueprint:
         entity:
           domain: sensor
       default: sensor.pollies_poeptroon_litter_level
-    
+
     status_sensor:
       name: Status Code Sensor
       description: Status code sensor
@@ -31,7 +31,7 @@ blueprint:
         entity:
           domain: sensor
       default: sensor.pollies_poeptroon_status_code
-    
+
     todo_list:
       name: Todo List
       description: Todoist lijst (todo.inbox) of lokale lijst (todo.shopping_list)
@@ -39,14 +39,14 @@ blueprint:
         entity:
           domain: todo
       default: todo.inbox
-    
+
     use_todoist:
       name: Use Todoist
       description: ON voor Todoist (completed status), OFF voor lokale lijst (remove)
       selector:
         boolean:
       default: true
-    
+
     waste_warning:
       name: Waste Warning Level (%)
       default: 70
@@ -56,7 +56,7 @@ blueprint:
           max: 89
           step: 5
           unit_of_measurement: "%"
-    
+
     waste_critical:
       name: Waste Critical Level (%)
       default: 85
@@ -66,7 +66,7 @@ blueprint:
           max: 100
           step: 5
           unit_of_measurement: "%"
-    
+
     litter_warning:
       name: Litter Warning Level (%)
       default: 30
@@ -76,7 +76,7 @@ blueprint:
           max: 50
           step: 5
           unit_of_measurement: "%"
-    
+
     litter_critical:
       name: Litter Critical Level (%)
       default: 15
@@ -108,31 +108,31 @@ trigger:
     id: waste_changed
     for:
       seconds: 5
-  
+
   # Litter level triggers
   - platform: state
     entity_id: !input litter_sensor
     id: litter_changed
     for:
       seconds: 5
-  
+
   # Status triggers
   - platform: state
     entity_id: !input status_sensor
     id: status_changed
     for:
       seconds: 3
-  
+
   # Check bij Home Assistant start
   - platform: homeassistant
     event: start
     id: startup_check
-  
+
   # Periodieke check elke 4 uur
   - platform: time_pattern
     hours: "/4"
     id: periodic_check
-  
+
   # Dagelijkse ochtend check
   - platform: time
     at: "09:00:00"
@@ -144,23 +144,22 @@ action:
       waste_level: "{{ states(waste_sensor) | int(0) }}"
       litter_level: "{{ states(litter_sensor) | int(0) }}"
       current_status: "{{ states(status_sensor) }}"
-      
+
   # Bij startup/periodic/morning checks, voer alle checks uit
   - choose:
       - conditions:
           - condition: trigger
-            id: 
+            id:
               - startup_check
               - periodic_check
               - morning_check
         sequence:
-          # Trigger alle checks door de check_all variabele te zetten
           - variables:
               check_all: true
-    default: 
+    default:
       - variables:
           check_all: false
-  
+
   # WASTE MANAGEMENT
   - choose:
       - conditions:
@@ -171,15 +170,13 @@ action:
               - condition: template
                 value_template: "{{ check_all }}"
         sequence:
-          # Get current tasks
           - service: todo.get_items
             target:
               entity_id: "{{ todo_list }}"
             data:
               status: needs_action
             response_variable: active_tasks
-          
-          # Process old waste tasks
+
           - repeat:
               for_each: "{{ active_tasks[todo_list]['items'] | default([]) }}"
               sequence:
@@ -187,12 +184,11 @@ action:
                     - conditions:
                         - condition: template
                           value_template: >
-                            {{ 'Poeplade' in repeat.item.summary or 
+                            {{ 'Poeplade' in repeat.item.summary or
                                'poeplade' in repeat.item.summary or
                                'Waste' in repeat.item.summary }}
                       sequence:
                         - choose:
-                            # Todoist - mark as completed
                             - conditions:
                                 - condition: template
                                   value_template: "{{ is_todoist }}"
@@ -205,17 +201,14 @@ action:
                                     status: "completed"
                                   continue_on_error: true
                           default:
-                            # Local list - remove item
                             - service: todo.remove_item
                               target:
                                 entity_id: "{{ todo_list }}"
                               data:
                                 item: "{{ repeat.item.summary }}"
                               continue_on_error: true
-          
-          # Add new waste task if needed
+
           - choose:
-              # CRITICAL
               - conditions:
                   - condition: template
                     value_template: "{{ waste_level >= waste_crit }}"
@@ -230,10 +223,8 @@ action:
                         De poeplade is {{ waste_level }}% vol!
                         Status: {{ current_status }}
                         Korrels: {{ litter_level }}%
-                        
+
                         Polly kan straks niet meer poepen!
-              
-              # WARNING
               - conditions:
                   - condition: template
                     value_template: "{{ waste_level >= waste_warn and waste_level < waste_crit }}"
@@ -244,7 +235,7 @@ action:
                     data:
                       item: "🟡 Polly's poeplade bijna vol ({{ waste_level }}%)"
                       due_date: "{{ (now() + timedelta(days=1)).date() }}"
-  
+
   # LITTER MANAGEMENT
   - choose:
       - conditions:
@@ -255,15 +246,13 @@ action:
               - condition: template
                 value_template: "{{ check_all }}"
         sequence:
-          # Get current tasks
           - service: todo.get_items
             target:
               entity_id: "{{ todo_list }}"
             data:
               status: needs_action
             response_variable: active_tasks
-          
-          # Process old litter tasks
+
           - repeat:
               for_each: "{{ active_tasks[todo_list]['items'] | default([]) }}"
               sequence:
@@ -271,13 +260,12 @@ action:
                     - conditions:
                         - condition: template
                           value_template: >
-                            {{ 'Korrels' in repeat.item.summary or 
+                            {{ 'Korrels' in repeat.item.summary or
                                'korrels' in repeat.item.summary or
                                'Litter' in repeat.item.summary or
                                'Kattenbakvulling' in repeat.item.summary }}
                       sequence:
                         - choose:
-                            # Todoist
                             - conditions:
                                 - condition: template
                                   value_template: "{{ is_todoist }}"
@@ -290,17 +278,14 @@ action:
                                     status: "completed"
                                   continue_on_error: true
                           default:
-                            # Local
                             - service: todo.remove_item
                               target:
                                 entity_id: "{{ todo_list }}"
                               data:
                                 item: "{{ repeat.item.summary }}"
                               continue_on_error: true
-          
-          # Add new litter task if needed
+
           - choose:
-              # CRITICAL
               - conditions:
                   - condition: template
                     value_template: "{{ litter_level <= litter_crit }}"
@@ -314,8 +299,6 @@ action:
                       description: |
                         Hopper heeft nog maar {{ litter_level }}% korrels!
                         Nieuwe zak kopen VANDAAG!
-              
-              # WARNING
               - conditions:
                   - condition: template
                     value_template: "{{ litter_level <= litter_warn and litter_level > litter_crit }}"
@@ -326,7 +309,7 @@ action:
                     data:
                       item: "🟡 Korrels worden minder ({{ litter_level }}%)"
                       due_date: "{{ (now() + timedelta(days=3)).date() }}"
-  
+
   # STATUS MANAGEMENT
   - choose:
       - conditions:
@@ -337,15 +320,13 @@ action:
               - condition: template
                 value_template: "{{ check_all }}"
         sequence:
-          # Get current tasks
           - service: todo.get_items
             target:
               entity_id: "{{ todo_list }}"
             data:
               status: needs_action
             response_variable: active_tasks
-          
-          # Process old status tasks
+
           - repeat:
               for_each: "{{ active_tasks[todo_list]['items'] | default([]) }}"
               sequence:
@@ -353,7 +334,7 @@ action:
                     - conditions:
                         - condition: template
                           value_template: >
-                            {{ 'Status:' in repeat.item.summary or 
+                            {{ 'Status:' in repeat.item.summary or
                                '⚠️' in repeat.item.summary or
                                '🔧' in repeat.item.summary or
                                '⭕' in repeat.item.summary or
@@ -362,7 +343,6 @@ action:
                                '❓ Status:' in repeat.item.summary }}
                       sequence:
                         - choose:
-                            # Todoist
                             - conditions:
                                 - condition: template
                                   value_template: "{{ is_todoist }}"
@@ -375,23 +355,18 @@ action:
                                     status: "completed"
                                   continue_on_error: true
                           default:
-                            # Local
                             - service: todo.remove_item
                               target:
                                 entity_id: "{{ todo_list }}"
                               data:
                                 item: "{{ repeat.item.summary }}"
                               continue_on_error: true
-          
-          # Add status task if needed
+
           - choose:
-              # Everything OK - geen taak nodig
               - conditions:
                   - condition: template
                     value_template: "{{ current_status in ['rdy', 'ccc', 'ccp', 'idle'] }}"
                 sequence: []
-              
-              # Problem statuses
               - conditions:
                   - condition: template
                     value_template: "{{ current_status not in ['rdy', 'ccc', 'ccp', 'idle'] }}"
