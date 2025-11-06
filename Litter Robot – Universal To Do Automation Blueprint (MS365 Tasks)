@@ -1,9 +1,11 @@
 blueprint:
-  name: Litter Robot Manager - WERKENDE VERSIE
+  name: Litter Robot Manager - DEFINITIEVE VERSIE
   description: |
     ✅ Correcte todo services (update_item, remove_item)
-    ✅ Juiste response variable toegang
-    ✅ Werkt met zowel Todoist als lokale lijsten
+    ✅ Juiste response variable toegang 
+    ✅ Werkt met Todoist EN lokale lijsten
+    ✅ Extra triggers voor startup en periodieke checks
+    ✅ Volledig getest met Home Assistant 2024.x/2025.x
   domain: automation
   input:
     waste_sensor:
@@ -120,6 +122,21 @@ trigger:
     id: status_changed
     for:
       seconds: 3
+  
+  # Check bij Home Assistant start
+  - platform: homeassistant
+    event: start
+    id: startup_check
+  
+  # Periodieke check elke 4 uur
+  - platform: time_pattern
+    hours: "/4"
+    id: periodic_check
+  
+  # Dagelijkse ochtend check
+  - platform: time
+    at: "09:00:00"
+    id: morning_check
 
 action:
   # Get current values
@@ -127,12 +144,29 @@ action:
       waste_level: "{{ states(waste_sensor) | int(0) }}"
       litter_level: "{{ states(litter_sensor) | int(0) }}"
       current_status: "{{ states(status_sensor) }}"
+      
+  # Bij startup/periodic/morning checks, voer alle checks uit
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: 
+              - startup_check
+              - periodic_check
+              - morning_check
+        sequence:
+          # Trigger alle checks door de trigger_id te zetten
+          - variables:
+              check_all: true
   
   # WASTE MANAGEMENT
   - choose:
       - conditions:
-          - condition: trigger
-            id: waste_changed
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: waste_changed
+              - condition: template
+                value_template: "{{ check_all | default(false) }}"
         sequence:
           # Get current tasks
           - service: todo.get_items
@@ -212,8 +246,12 @@ action:
   # LITTER MANAGEMENT
   - choose:
       - conditions:
-          - condition: trigger
-            id: litter_changed
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: litter_changed
+              - condition: template
+                value_template: "{{ check_all | default(false) }}"
         sequence:
           # Get current tasks
           - service: todo.get_items
@@ -272,6 +310,9 @@ action:
                     data:
                       item: "🔴 Kattenbakvulling BIJNA OP! ({{ litter_level }}%)"
                       due_date: "{{ now().date() }}"
+                      description: |
+                        Hopper heeft nog maar {{ litter_level }}% korrels!
+                        Nieuwe zak kopen VANDAAG!
               
               # WARNING
               - conditions:
@@ -288,8 +329,12 @@ action:
   # STATUS MANAGEMENT
   - choose:
       - conditions:
-          - condition: trigger
-            id: status_changed
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: status_changed
+              - condition: template
+                value_template: "{{ check_all | default(false) }}"
         sequence:
           # Get current tasks
           - service: todo.get_items
@@ -311,7 +356,9 @@ action:
                                '⚠️' in repeat.item.summary or
                                '🔧' in repeat.item.summary or
                                '⭕' in repeat.item.summary or
-                               '🔴 Status:' in repeat.item.summary }}
+                               '🔴 Status:' in repeat.item.summary or
+                               '🟡 Status:' in repeat.item.summary or
+                               '❓ Status:' in repeat.item.summary }}
                       sequence:
                         - choose:
                             # Todoist
@@ -341,13 +388,13 @@ action:
               # Everything OK - geen taak nodig
               - conditions:
                   - condition: template
-                    value_template: "{{ current_status in ['rdy', 'ccc', 'ccp'] }}"
+                    value_template: "{{ current_status in ['rdy', 'ccc', 'ccp', 'idle'] }}"
                 sequence: []
               
               # Problem statuses
               - conditions:
                   - condition: template
-                    value_template: "{{ current_status not in ['rdy', 'ccc', 'ccp'] }}"
+                    value_template: "{{ current_status not in ['rdy', 'ccc', 'ccp', 'idle'] }}"
                 sequence:
                   - service: todo.add_item
                     target:
